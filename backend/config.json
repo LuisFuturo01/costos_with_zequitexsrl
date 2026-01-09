@@ -1,0 +1,68 @@
+{
+  "password_hash": "scrypt:32768:8:1$Aib9lPzkNX18pvcE$ac2ab1110beb9009f1b963b112bb361da97a7d67a82b0c8d5aeb0f8a5e422c5b5d28d2781c6b46a0953101ccbfe717ff1bac76f62520f328047291649a63d9e9",
+  "pricing": {
+    "base_price": 5.0,
+    "price_per_cm2": 0.4,
+    "price_per_color": 0.4,
+    "min_price": 10.0
+  },
+  "discounts": [
+    {
+      "name": "10-50 piezas",
+      "quantity_min": 10,
+      "quantity_max": 50,
+      "discount": 10
+    },
+    {
+      "name": "51-100 piezas",
+      "quantity_min": 51,
+      "quantity_max": 100,
+      "discount": 15
+    },
+    {
+      "name": "101-500 piezas",
+      "quantity_min": 101,
+      "quantity_max": 500,
+      "discount": 20
+    },
+    {
+      "name": "500+ piezas",
+      "quantity_min": 501,
+      "quantity_max": 999999,
+      "discount": 25
+    }
+  ],
+  "stitch_density": 60,
+  "hoops": [
+    {
+      "name": "10x10 cm",
+      "max_width": 10,
+      "max_height": 10,
+      "cost": 0
+    },
+    {
+      "name": "13x18 cm",
+      "max_width": 13,
+      "max_height": 18,
+      "cost": 0
+    },
+    {
+      "name": "16x26 cm",
+      "max_width": 16,
+      "max_height": 26,
+      "cost": 2
+    },
+    {
+      "name": "20x30 cm",
+      "max_width": 20,
+      "max_height": 30,
+      "cost": 5
+    },
+    {
+      "name": "Gigante / Especial",
+      "max_width": 999,
+      "max_height": 999,
+      "cost": 10
+    }
+  ]
+}
