@@ -1,6 +1,10 @@
-Flask
+flask
+flask-sqlalchemy
 flask-cors
-rembg
-Pillow
-numpy
+mysqlclient
+cryptography
+werkzeug
 scikit-learn
+numpy
+pillow
+rembg
