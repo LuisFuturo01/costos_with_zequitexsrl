@@ -484,9 +484,7 @@ select.styled-input:hover:not(:disabled):not(:focus) {
 
 .data-table {
   width: 100%;
-  border-collapse: collapse;
   font-size: var(--font-size-sm);
-  min-width: 600px;
 }
 
 .data-table th {
@@ -499,17 +497,17 @@ select.styled-input:hover:not(:disabled):not(:focus) {
   white-space: nowrap;
 }
 
-.data-table td {
+.data-table span {
   padding: var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--border-default);
   color: var(--text-primary);
 }
 
-.data-table tbody tr:hover {
+.data-table tbody div:hover {
   background: var(--bg-page);
 }
 
-.data-table tbody tr:nth-child(even) {
+.data-table tbody div:nth-child(even) {
   background: var(--bg-page);
 }
 
@@ -888,6 +886,16 @@ select.styled-input:hover:not(:disabled):not(:focus) {
   padding: var(--spacing-sm) 0;
   font-size: var(--font-size-sm);
   border-bottom: 1px solid var(--bg-page);
+  .row-label{
+    span{
+
+    }
+    small{
+      margin-left: .4rem;
+      color: #0f6930;
+      font-size: .5rem;
+    }
+  }
 }
 
 .breakdown-row:last-child {
@@ -1702,7 +1710,7 @@ select.styled-input:hover:not(:disabled):not(:focus) {
   }
 
   .data-table th,
-  .data-table td {
+  .data-table span {
     padding: var(--spacing-xs) var(--spacing-sm);
   }
 
@@ -1811,10 +1819,7 @@ select.styled-input:hover:not(:disabled):not(:focus) {
   }
 
   /* Ocultar elementos no esenciales en mobile */
-  .settings-btn,
-  .user-info {
-    display: none;
-  }
+  
 
   /* Cards compactas */
   .card {
@@ -2227,20 +2232,17 @@ select.styled-input:hover:not(:disabled):not(:focus) {
     gap: var(--spacing-sm);
   }
 
-  /* User info sí se puede ocultar */
-  .user-info {
-    display: none;
-  }
+  
 
   /* Alternativa: Si quieres mostrar user-info compacto */
-  /*
+  
   .user-info {
     display: flex !important;
     padding: var(--spacing-xs) var(--spacing-sm);
     font-size: 10px;
     gap: var(--spacing-xs);
   }
-  */
+  
 }
 
 /* CORRECCIÓN 3: Floating Config Button - Asegurar visibilidad */
@@ -2300,7 +2302,50 @@ select.styled-input:hover:not(:disabled):not(:focus) {
     font-size: var(--font-size-sm);
     padding: var(--spacing-xs) var(--spacing-sm);
   }
+  
 }
+.container .card {
+  width: 100%;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+
+  .data-table {
+    display: flex;
+    width: 100% ;
+    flex-wrap: wrap;
+    thead{
+      width: 100%;
+      display: flex;
+      div{
+        display: flex;
+        flex: 1;
+      }
+      th{
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+    }
+    tbody{
+      width: 100%;
+      div{
+        width: 100%; ;
+        display: flex;
+        span {
+          flex: 1;
+          display: flex;
+          justify-content: center;
+          align-items: center;         
+        }
+      }
+    }
+    
+  }
+}
+
+
 
 /* CORRECCIÓN 5: Prevenir overflow en container principal */
 @media (max-width: 480px) {
@@ -2370,5 +2415,41 @@ select.styled-input:hover:not(:disabled):not(:focus) {
 
   .btn-add-client:active {
     transform: translateY(0) scale(0.95);
+  }
+  .container .card {
+  width: 100% !important;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+
+  .data-table {
+    display: flex;
+    width: 100% ;
+    flex-wrap: wrap;
+    min-width: 0;
+    tbody{
+      width: 100%;
+      min-width: 0 ;
+      div{
+        width: 100%; ;
+        display: flex;
+        span {
+          flex: 1;
+          display: flex;
+          justify-content: center;
+          align-items: center;         
+        }
+      }
+    }
+    
+  }
+}
+}
+.sm{
+  color: white;
+}
+.user-info{
+  span{
+    font-size: 1rem;
   }
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react';
-import type { Config, View, User, Client, Order, PriceConfig } from '../../types';
+import type { Config, View, User, Client, Order, Pricing } from '../../types'; // Ajusté Pricing type si se llama PriceConfig en tu types, puse Pricing para coincidir con tu api.ts
 import { api } from '../../services/api';
 // Componentes UI
 import { WorkClientView } from './WorkClientView';
@@ -34,7 +34,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
   
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [priceHistory, setPriceHistory] = useState<PriceConfig[]>([]);
+  const [priceHistory, setPriceHistory] = useState<Pricing[]>([]);
   const [clientOrders, setClientOrders] = useState<Order[]>([]);
   
   const [selectedClientForOrders, setSelectedClientForOrders] = useState<Client | null>(null);
@@ -43,7 +43,6 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   const [editingClient, setEditingClient] = useState<Partial<Client> | null>(null);
 
-  // --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN ---
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, id: number, type: 'user'|'client'}>({isOpen: false, id: 0, type: 'user'});
   const [alertInfo, setAlertInfo] = useState<{open: boolean, msg: string}>({open: false, msg: ''});
 
@@ -72,6 +71,29 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
       } catch (e) { setAlertInfo({open: true, msg: "Error cargando órdenes"}); }
   };
 
+  // --- LOGICA PARA CLONAR/GUARDAR NUEVA COTIZACIÓN ---
+  const handleCloneOrder = async (newOrderData: any) => {
+      try {
+          // Asignar el ID del cliente actual
+          const payload = {
+              ...newOrderData,
+              cliente_id: selectedClientForOrders?.id,
+              configuracion_id: config.pricing.id 
+          }; // Corregido: 'id' suele estar en pricing, verifica tu interface Pricing
+
+          await api.saveOrder(payload);
+          setAlertInfo({ open: true, msg: '✅ Nueva cotización generada correctamente' });
+          setViewingOrder(null); 
+          
+          if (selectedClientForOrders) {
+              const updatedOrders = await api.getClientOrders(selectedClientForOrders.id);
+              setClientOrders(updatedOrders);
+          }
+      } catch (error: any) {
+          setAlertInfo({ open: true, msg: `Error: ${error.message}` });
+      }
+  };
+
   const updatePrice = (field: string, val: number) => {
     // @ts-ignore
     setConfig({...config, pricing: {...config.pricing, [field]: val}});
@@ -86,41 +108,59 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
       } catch (error) { setAlertInfo({open: true, msg: 'Error al guardar'}); }
   };
 
-  // --- USUARIOS ---
+  // --- MANEJO DE USUARIOS (EMPLEADOS) ---
   const handleSaveUser = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    const res = await api.saveUser(editingUser);
-    if (res.success) { setEditingUser(null); loadUsers(); } else setAlertInfo({open: true, msg: res.message});
+    try {
+        const res = await api.saveUser(editingUser);
+        // Verificar éxito basado en tu API
+        if (res.success || res.id) { 
+            setEditingUser(null); 
+            loadUsers(); 
+            setAlertInfo({open: true, msg: 'Usuario guardado correctamente'});
+        } else {
+            setAlertInfo({open: true, msg: res.message || 'Error al guardar usuario'});
+        }
+    } catch (error: any) {
+        setAlertInfo({open: true, msg: error.message});
+    }
   };
   
   const requestDeleteUser = (id: number) => setConfirmModal({isOpen: true, id, type: 'user'});
 
-  // --- CLIENTES ---
+  // --- MANEJO DE CLIENTES ---
   const handleSaveClient = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingClient) return;
-    await api.saveClient(editingClient);
-    setEditingClient(null);
-    loadClients();
+    try {
+        await api.saveClient(editingClient);
+        setEditingClient(null);
+        await loadClients(); // Esperamos a que cargue
+        setAlertInfo({open: true, msg: 'Cliente guardado correctamente'});
+    } catch (error: any) {
+        setAlertInfo({open: true, msg: error.message || 'Error al guardar cliente'});
+    }
   };
 
   const requestDeleteClient = (id: number) => setConfirmModal({isOpen: true, id, type: 'client'});
 
-  // --- EJECUCIÓN DE ELIMINACIÓN ---
   const confirmDelete = async () => {
       setConfirmModal({...confirmModal, isOpen: false});
-      if (confirmModal.type === 'user') {
-          await api.deleteUser(confirmModal.id);
-          loadUsers();
-      } else {
-          await api.deleteClient(confirmModal.id);
-          loadClients();
+      try {
+          if (confirmModal.type === 'user') {
+              await api.deleteUser(confirmModal.id);
+              loadUsers();
+          } else {
+              await api.deleteClient(confirmModal.id);
+              loadClients();
+          }
+      } catch (e) {
+          setAlertInfo({open: true, msg: 'Error al eliminar registro'});
       }
   };
 
   return (
-    // Importante: La clase 'app' asegura que el header tome los estilos globales
     <div className="app config-view">
       <header className="header">
         <h1 className="brand-name">
@@ -132,7 +172,6 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
         </div>
       </header>
 
-      {/* --- MODALES INTERNOS --- */}
       <AlertModal 
         isOpen={alertInfo.open}
         title="Información"
@@ -144,7 +183,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
           <div className="modal-overlay" style={{zIndex: 3002}}>
               <div className="modal-card" style={{maxWidth: '350px', textAlign: 'center'}}>
                   <h3 style={{color: '#ef4444', marginBottom: '1rem'}}>¿Estás seguro?</h3>
-                  <p style={{marginBottom: '1.5rem', color: '#fff'}}>Esta acción eliminará el registro permanentemente.</p>
+                  <p style={{marginBottom: '1.5rem', color: '#000000ff'}}>Esta acción eliminará el registro permanentemente.</p>
                   <div className="modal-actions" style={{justifyContent: 'center'}}>
                       <button className="btn-secondary" onClick={() => setConfirmModal({...confirmModal, isOpen: false})}>Cancelar</button>
                       <button className="btn-main" style={{background: '#ef4444', borderColor: '#ef4444'}} onClick={confirmDelete}>Eliminar</button>
@@ -167,12 +206,13 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
             )}
         </div>
 
-        {/* --- VISOR DE TICKET HISTÓRICO --- */}
         {viewingOrder && selectedClientForOrders && (
             <WorkClientView 
                 order={viewingOrder} 
                 clientName={selectedClientForOrders.nombre} 
-                onClose={() => setViewingOrder(null)} 
+                onClose={() => setViewingOrder(null)}
+                config={config} 
+                onSaveNewOrder={handleCloneOrder}
             />
         )}
 
@@ -213,26 +253,26 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                             </div>
                             <div style={{maxHeight:'400px', overflowY:'auto', margin:'10px 0'}}>
                                 {clientOrders.length === 0 ? <p>No hay cotizaciones guardadas.</p> : (
-                                    <table className="data-table">
+                                    <div className="data-table">
                                         <thead>
-                                            <tr>
+                                            <div>
                                                 <th>Fecha</th>
                                                 <th>Trabajo</th>
                                                 <th style={{textAlign: 'right'}}>Acción</th>
-                                            </tr>
+                                            </div>
                                         </thead>
                                         <tbody>
                                             {clientOrders.map(o => (
-                                                <tr key={o.id}>
-                                                    <td>{new Date(o.fecha_pedido).toLocaleDateString()}</td>
-                                                    <td style={{fontSize:'0.9rem', fontWeight: 'bold', color: '#fff'}}>{o.nombre_trabajo}</td>
-                                                    <td style={{textAlign: 'right'}}>
+                                                <div key={o.id}>
+                                                    <span>{new Date(o.fecha_pedido).toLocaleDateString()}</span>
+                                                    <span style={{fontSize:'0.9rem', fontWeight: 'bold', color: '#fff'}}>{o.nombre_trabajo}</span>
+                                                    <span style={{textAlign: 'right'}}>
                                                         <button className="btn-secondary sm" onClick={() => setViewingOrder(o)}>👁️ Ver</button>
-                                                    </td>
-                                                </tr>
+                                                    </span>
+                                                </div>
                                             ))}
                                         </tbody>
-                                    </table>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -244,9 +284,15 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                         <div className="modal-card">
                             <form onSubmit={handleSaveClient}>
                                 <h3>{editingClient.id ? 'Editar' : 'Nuevo'} Cliente</h3>
-                                <input className="styled-input" required placeholder="Nombre" value={editingClient.nombre||''} onChange={e=>setEditingClient({...editingClient, nombre:e.target.value})} />
-                                <input className="styled-input" style={{marginTop:10}} placeholder="Referencia" value={editingClient.numero_referencia||''} onChange={e=>setEditingClient({...editingClient, numero_referencia:e.target.value})} />
-                                <input className="styled-input" style={{marginTop:10}} placeholder="Domicilio" value={editingClient.domicilio||''} onChange={e=>setEditingClient({...editingClient, domicilio:e.target.value})} />
+                                <label style={{fontSize:'0.8rem', color:'#888'}}>Nombre del Cliente</label>
+                                <input className="styled-input" required placeholder="Nombre" value={editingClient.nombre || ''} onChange={e=>setEditingClient({...editingClient, nombre:e.target.value})} />
+                                
+                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:10, display:'block'}}>Nro Referencia / Teléfono</label>
+                                <input className="styled-input" placeholder="Referencia" value={editingClient.numero_referencia || ''} onChange={e=>setEditingClient({...editingClient, numero_referencia:e.target.value})} />
+                                
+                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:10, display:'block'}}>Domicilio</label>
+                                <input className="styled-input" placeholder="Domicilio" value={editingClient.domicilio || ''} onChange={e=>setEditingClient({...editingClient, domicilio:e.target.value})} />
+                                
                                 <div className="modal-actions">
                                     <button type="button" className="btn-secondary" onClick={()=>setEditingClient(null)}>Cancelar</button>
                                     <button type="submit" className="btn-main">Guardar</button>
@@ -256,21 +302,21 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                     </div>
                 )}
 
-                <table className="data-table">
-                    <thead><tr><th>Nombre</th><th>Ref</th><th>Acciones</th></tr></thead>
+                <div className="data-table">
+                    <thead><div><th>Nombre</th><th>Ref</th><th>Acciones</th></div></thead>
                     <tbody>
                         {clients.map(c => (
-                            <tr key={c.id}>
-                                <td style={{cursor: 'pointer', color: '#34d399', fontWeight: 'bold'}} onClick={() => handleShowOrders(c)}>{c.nombre} ↗</td>
-                                <td>{c.numero_referencia}</td>
-                                <td>
+                            <div key={c.id}>
+                                <span style={{cursor: 'pointer', color: '#34d399', fontWeight: 'bold'}} onClick={() => handleShowOrders(c)}>{c.nombre} ↗</span>
+                                <span>{c.numero_referencia}</span>
+                                <span>
                                     <button className="icon-btn" onClick={() => setEditingClient(c)}>✏️</button>
                                     {isAdmin && <button className="icon-btn danger" onClick={() => requestDeleteClient(c.id)}>🗑️</button>}
-                                </td>
-                            </tr>
+                                </span>
+                            </div>
                         ))}
                     </tbody>
-                </table>
+                </div>
             </div>
         )}
 
@@ -279,45 +325,99 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
             <div className="card" style={{overflowX: 'auto'}}>
                 <h3>Historial de Configuraciones</h3>
                 <div className="table-responsive" style={{overflowX: 'auto'}}>
-                    <table className="data-table" style={{minWidth: '1200px', fontSize: '0.85rem'}}>
+                    <div className="data-table" style={{minWidth: '1200px', fontSize: '0.85rem'}}>
                         <thead>
-                            <tr>
+                            <div>
                                 <th style={{width: 140}}>Fecha</th>
                                 <th>1.000 pts</th><th>Fac c/hilo</th><th>H. Bordar</th><th>H. Bobina</th><th>Pellón Rollo</th><th>T. Estruct</th><th>T. Normal</th><th>Papel Rollo</th><th>Imp.</th><th>Corte</th><th>Estado</th>
-                            </tr>
+                            </div>
                         </thead>
                         <tbody>
                             {priceHistory.map(h => (
-                                <tr key={h.id}>
-                                    <td>{h.fecha_modificacion ? new Date(h.fecha_modificacion).toLocaleString() : 'N/A'}</td>
-                                    <td>{h.precio_stitch_1000}</td><td>{h.factor_cambio_hilo}</td><td>{h.costo_hilo_bordar}</td><td>{h.costo_hilo_bobina}</td><td>{h.costo_pellon}</td><td>{h.tela_estructurante}</td><td>{h.tela_normal}</td><td>{h.rollo_papel}</td><td>{h.costo_impresion}</td><td>{h.corte_impresion}</td>
-                                    <td>{h.activo ? <span className="badge admin" style={{background:'#10b981'}}>Activo</span> : <span className="badge user" style={{background:'#9ca3af'}}>Inactivo</span>}</td>
-                                </tr>
+                                <div key={h.id}>
+                                    <span>{h.fecha_modificacion ? new Date(h.fecha_modificacion).toLocaleString() : 'N/A'}</span>
+                                    <span>{h.precio_stitch_1000}</span><span>{h.factor_cambio_hilo}</span><span>{h.costo_hilo_bordar}</span><span>{h.costo_hilo_bobina}</span><span>{h.costo_pellon}</span><span>{h.tela_estructurante}</span><span>{h.tela_normal}</span><span>{h.rollo_papel}</span><span>{h.costo_impresion}</span><span>{h.corte_impresion}</span>
+                                    <span>{h.activo ? <span className="badge admin" style={{background:'#10b981'}}>Activo</span> : <span className="badge user" style={{background:'#9ca3af'}}>Inactivo</span>}</span>
+                                </div>
                             ))}
                         </tbody>
-                    </table>
+                    </div>
                 </div>
             </div>
         )}
 
-        {/* TAB USUARIOS */}
+        {/* TAB USUARIOS - CORREGIDO */}
         {activeTab === 'usuarios' && isAdmin && (
             <div className="card">
-                <div className="card-header"><h3>Usuarios</h3><button className="btn-main sm" onClick={()=>setEditingUser({})}>+</button></div>
+                <div className="card-header">
+                    <h3>Usuarios / Empleados</h3>
+                    <button className="btn-main sm" onClick={()=>setEditingUser({})}>+ Nuevo Personal</button>
+                </div>
+                
                 {editingUser && (
                     <div className="modal-overlay">
                         <div className="modal-card">
                             <form onSubmit={handleSaveUser}>
-                                <input className="styled-input" placeholder="Nombre" value={editingUser.nombre||''} onChange={e=>setEditingUser({...editingUser, nombre:e.target.value})}/>
-                                <input className="styled-input" style={{marginTop:10}} placeholder="Usuario" value={editingUser.usuario||''} onChange={e=>setEditingUser({...editingUser, usuario:e.target.value})}/>
-                                <input className="styled-input" style={{marginTop:10}} type="password" placeholder="Pass" value={editingUser.password||''} onChange={e=>setEditingUser({...editingUser, password:e.target.value})}/>
-                                <select className="styled-input" style={{marginTop:10}} value={editingUser.role} onChange={e=>setEditingUser({...editingUser, role:e.target.value as any})}><option value="empleado">Empleado</option><option value="administrador">Admin</option></select>
-                                <div className="modal-actions"><button type="submit" className="btn-main">Guardar</button><button type="button" className="btn-secondary" onClick={()=>setEditingUser(null)}>X</button></div>
+                                <h3>{editingUser.id ? 'Editar' : 'Crear'} Usuario</h3>
+                                
+                                <label style={{fontSize:'0.8rem', color:'#888'}}>Nombre Completo</label>
+                                <input className="styled-input" required placeholder="Ej: Juan Perez" value={editingUser.nombre || ''} onChange={e=>setEditingUser({...editingUser, nombre:e.target.value})}/>
+                                
+                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Usuario (Login)</label>
+                                <input className="styled-input" required placeholder="usuario" value={editingUser.usuario || ''} onChange={e=>setEditingUser({...editingUser, usuario:e.target.value})}/>
+                                
+                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Contraseña {editingUser.id && '(Dejar en blanco para no cambiar)'}</label>
+                                <input className="styled-input" type="password" placeholder="***" value={editingUser.password || ''} onChange={e=>setEditingUser({...editingUser, password:e.target.value})}/>
+                                
+                                {/* NUEVOS CAMPOS AÑADIDOS */}
+                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Celular</label>
+                                <input className="styled-input" placeholder="777..." type="tel" value={editingUser.celular || ''} onChange={e=>setEditingUser({...editingUser, celular:e.target.value})}/>
+
+                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Domicilio</label>
+                                <input className="styled-input" placeholder="Dirección..." value={editingUser.domicilio || ''} onChange={e=>setEditingUser({...editingUser, domicilio:e.target.value})}/>
+                                
+                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Rol</label>
+                                <select className="styled-input" value={editingUser.role || 'empleado'} onChange={e=>setEditingUser({...editingUser, role:e.target.value as any})}>
+                                    <option value="empleado">Empleado</option>
+                                    <option value="administrador">Administrador</option>
+                                </select>
+                                
+                                <div className="modal-actions">
+                                    <button type="button" className="btn-secondary" onClick={()=>setEditingUser(null)}>Cancelar</button>
+                                    <button type="submit" className="btn-main">Guardar</button>
+                                </div>
                             </form>
                         </div>
                     </div>
                 )}
-                <table className="data-table"><tbody>{users.map(u=><tr key={u.id}><td>{u.usuario}</td><td>{u.role}</td><td><button className="icon-btn danger" onClick={()=>requestDeleteUser(u.id)}>🗑️</button></td></tr>)}</tbody></table>
+                
+                <div className="data-table">
+                    <thead>
+                        <div>
+                            <th>Usuario</th>
+                            <th>Nombre</th>
+                            <th>Celular</th>
+                            <th>Domicilio</th>
+                            <th>Rol</th>
+                            <th>Acciones</th>
+                        </div>
+                    </thead>
+                    <tbody>
+                        {users.map(u=>(
+                            <div key={u.id}>
+                                <span style={{fontWeight:'bold'}}>{u.usuario}</span>
+                                <span>{u.nombre}</span>
+                                <span>{u.celular || '-'}</span>
+                                <span style={{fontSize:'0.85rem'}}>{u.domicilio || '-'}</span>
+                                <span>{u.role === 'administrador' ? '👑 Admin' : 'Empleado'}</span>
+                                <span>
+                                    <button className="icon-btn" onClick={()=>setEditingUser(u)} title="Editar">✏️</button>
+                                    <button className="icon-btn danger" onClick={()=>requestDeleteUser(u.id)} title="Eliminar">🗑️</button>
+                                </span>
+                            </div>
+                        ))}
+                    </tbody>
+                </div>
             </div>
         )}
       </div>

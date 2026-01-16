@@ -84,7 +84,8 @@ class Ordenes(db.Model):
     alto = db.Column(db.Numeric(10, 2), default=0.00)
     bastidor = db.Column(db.String(100))
     tipo_tela = db.Column(db.String(50))
-    
+    tiene_sublimacion = db.Column(db.Boolean, default=False)
+
     cantidad = db.Column(db.Integer, default=1)
     precio_unitario = db.Column(db.Numeric(10, 2), default=0.00)
     precio_total = db.Column(db.Numeric(10, 2), default=0.00)
@@ -107,6 +108,7 @@ class Ordenes(db.Model):
             "alto": float(self.alto) if self.alto else 0,
             "bastidor": self.bastidor,
             "tipo_tela": self.tipo_tela,
+            "tiene_sublimacion": self.tiene_sublimacion,
             "cantidad": self.cantidad,
             "precio_unitario": float(self.precio_unitario) if self.precio_unitario else 0,
             "precio_total": float(self.precio_total) if self.precio_total else 0,

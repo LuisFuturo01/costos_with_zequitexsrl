@@ -18,6 +18,7 @@ except ImportError:
 app = Flask(__name__)
 CORS(app)
 
+# Asegúrate de que esta URI sea correcta para tu entorno
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://LuisFuturo01:LuisFuturo01_2025@localhost/zequitexcotizador'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -70,9 +71,9 @@ def get_config():
         response['pricing'] = precios_db.to_dict()
     else:
         response['pricing'] = {
-            "precio_stitch_1000": 1.0, "factor_cambio_hilo": 0.5, "costo_hilo_bordar": 19,
-            "costo_hilo_bobina": 9, "costo_pellon": 300, "tela_estructurante": 180,
-            "tela_normal": 18, "rollo_papel": 330, "costo_impresion": 3, "corte_impresion": 1.7
+            "precio_stitch_1000": 0, "factor_cambio_hilo": 0, "costo_hilo_bordar": 0,
+            "costo_hilo_bobina": 0, "costo_pellon": 0, "tela_estructurante": 0,
+            "tela_normal": 0, "rollo_papel": 0, "costo_impresion": 0, "corte_impresion": 0
         }
     response['discounts'] = []
     response['hoops'] = []
@@ -131,6 +132,7 @@ def create_order():
             alto=data.get('alto', 0.0),
             bastidor=data.get('bastidor', ''),
             tipo_tela=data.get('tipo_tela', ''),
+            tiene_sublimacion=data.get('tiene_sublimacion', False),
             cantidad=data.get('cantidad', 1),
             precio_unitario=data.get('precio_unitario', 0.0),
             precio_total=data.get('precio_total', 0.0),
@@ -231,9 +233,18 @@ def process_image():
 
 @app.route('/users', methods=['GET'])
 def get_users():
-    # FILTRO: Solo Personal activo (activo=True)
+    # FILTRO: Solo Personal activo
     users = Personal.query.filter_by(activo=True).all()
-    res = [{"id": u.id, "nombre": u.nombre, "usuario": u.usuario, "role": u.rol, "activo": u.activo} for u in users]
+    # CORRECCIÓN: Agregados 'celular' y 'domicilio' al response
+    res = [{
+        "id": u.id, 
+        "nombre": u.nombre, 
+        "usuario": u.usuario, 
+        "role": u.rol, 
+        "activo": u.activo,
+        "celular": u.celular,      # <--- Faltaba esto
+        "domicilio": u.domicilio   # <--- Faltaba esto
+    } for u in users]
     return jsonify(res)
 
 @app.route('/users', methods=['POST'])
@@ -241,14 +252,43 @@ def create_user():
     data = request.get_json()
     if Personal.query.filter_by(usuario=data.get('usuario')).first():
         return jsonify({"success": False, "message": "Usuario existe"}), 400
+    
     new_user = Personal(
-        nombre=data.get('nombre'), usuario=data.get('usuario'), rol=data.get('role', 'empleado'),
+        nombre=data.get('nombre'), 
+        usuario=data.get('usuario'), 
+        rol=data.get('role', 'empleado'),
         password_hash=generate_password_hash(data.get('password', '123456')), 
-        activo=True # Nace activo
+        celular=data.get('celular'),     # <--- Guardar celular
+        domicilio=data.get('domicilio'), # <--- Guardar domicilio
+        activo=True
     )
     db.session.add(new_user)
     db.session.commit()
     return jsonify({"success": True})
+
+# --- RUTA QUE FALTABA: EDITAR USUARIO (PUT) ---
+@app.route('/users/<int:id>', methods=['PUT'])
+def update_user(id):
+    user = Personal.query.get_or_404(id)
+    data = request.get_json()
+    
+    # Actualizamos campos si vienen en el JSON
+    if 'nombre' in data: user.nombre = data['nombre']
+    if 'usuario' in data: user.usuario = data['usuario']
+    if 'role' in data: user.rol = data['role']
+    if 'celular' in data: user.celular = data['celular']
+    if 'domicilio' in data: user.domicilio = data['domicilio']
+    
+    # Si viene password y no está vacío, lo actualizamos
+    if data.get('password') and data.get('password').strip() != '':
+        user.password_hash = generate_password_hash(data['password'])
+        
+    try:
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/users/<int:id>', methods=['DELETE'])
 def delete_user(id):
@@ -256,14 +296,15 @@ def delete_user(id):
     if u.usuario == 'admin': 
         return jsonify({"success": False, "message": "No se puede borrar al admin"}), 400
     
-    # BORRADO LÓGICO: Usamos 'activo'
+    # BORRADO LÓGICO
     u.activo = False
     db.session.commit()
     return jsonify({"success": True})
 
+# --- CLIENTES ---
+
 @app.route('/clients', methods=['GET'])
 def get_clients():
-    # FILTRO: Solo Clientes activos (estado=True)
     clients = Clientes.query.filter_by(estado=True).all()
     res = [{"id":c.id, "nombre":c.nombre, "numero_referencia":c.numero_referencia, "domicilio":c.domicilio} for c in clients]
     return jsonify(res)
@@ -275,16 +316,32 @@ def create_client():
         nombre=data.get('nombre'), 
         numero_referencia=data.get('numero_referencia'), 
         domicilio=data.get('domicilio'),
-        estado=True # Nace activo
+        estado=True
     )
     db.session.add(new_c)
     db.session.commit()
     return jsonify({"success": True})
 
+# --- RUTA QUE FALTABA: EDITAR CLIENTE (PUT) ---
+@app.route('/clients/<int:id>', methods=['PUT'])
+def update_client(id):
+    client = Clientes.query.get_or_404(id)
+    data = request.get_json()
+    
+    if 'nombre' in data: client.nombre = data['nombre']
+    if 'numero_referencia' in data: client.numero_referencia = data['numero_referencia']
+    if 'domicilio' in data: client.domicilio = data['domicilio']
+    
+    try:
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
 @app.route('/clients/<int:id>', methods=['DELETE'])
 def delete_client(id):
     c = Clientes.query.get_or_404(id)
-    # BORRADO LÓGICO: Usamos 'estado'
     c.estado = False 
     db.session.commit()
     return jsonify({"success": True})
@@ -292,7 +349,6 @@ def delete_client(id):
 if __name__ == '__main__':
     init_db_data(app)
     with app.app_context():
-        # Verificamos admin activo
         if not Personal.query.filter_by(usuario='admin').first():
             print("👤 Creando admin por defecto...")
             admin = Personal(

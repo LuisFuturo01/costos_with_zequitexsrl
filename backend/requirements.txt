@@ -1,10 +1,11 @@
 flask
 flask-sqlalchemy
 flask-cors
+pymysql
 mysqlclient
 cryptography
 werkzeug
 scikit-learn
 numpy
 pillow
-rembg
+rembg[gpu]

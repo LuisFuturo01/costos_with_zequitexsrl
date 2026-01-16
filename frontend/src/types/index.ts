@@ -18,6 +18,8 @@ export interface ProcessResult {
     tela?: number;
     pellon?: number;
     corte?: number;
+    impresion?: number;
+
   };
   
   precio_sugerido: number; // Precio final total
@@ -63,11 +65,11 @@ export interface Pricing {
   tela_estructurante: number;
   tela_normal: number;
   rollo_papel: number;
+  costo_rollo: number;
   costo_impresion: number;
   fecha_modificacion?: string; 
   activo?: boolean;
   corte_impresion?: number;
-
 }
 
 export interface LoginResponse {
@@ -90,6 +92,7 @@ export interface Order {
   alto: number;
   bastidor: string;
   tipo_tela: string;
+  tiene_sublimacion: boolean;
   cantidad: number;
   precio_unitario: number;
   precio_total: number;

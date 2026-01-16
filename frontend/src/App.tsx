@@ -17,11 +17,11 @@ import { InputModal } from './components/ui/InputModal';
 import { AlertModal } from './components/ui/AlertModal';
 
 const BASTIDORES_DISPONIBLES = [
-  { nombre: "Bastidor 10", ancho: 8.5, alto: 8.5 },
-  { nombre: "Bastidor 13", ancho: 9.5, alto: 9.5 },
-  { nombre: "Bastidor 16", ancho: 12.5, alto: 12.5 },
-  { nombre: "Bastidor 20", ancho: 16.5, alto: 16.5 },
-  { nombre: "Bastidor 31", ancho: 27.5, alto: 27.5 }
+  { nombre: "10 cm", size: 10, corte: 0.15 },
+  { nombre: "13 cm", size: 13, corte: 0.25 },
+  { nombre: "16 cm", size: 16, corte: 0.35 },
+  { nombre: "20 cm", size: 20, corte: 0.45 },
+  { nombre: "31 cm", size: 31, corte: 0.65 }
 ];
 
 function App() {
@@ -64,6 +64,11 @@ function App() {
     if (valor <= 0) return 0;
     const centavos = Math.round(valor * 100);
     return (Math.ceil(centavos / 5) * 5) / 100;
+  };
+
+  const getSelectedClient = (): Client | null => {
+    if (!selectedClientId) return null;
+    return clients.find(c => c.id === Number(selectedClientId)) || null;
   };
 
   // Helper de alertas
@@ -111,8 +116,7 @@ function App() {
           executePrint(name);
       }
   };
-
-  // 1. Ejecutar Guardado
+  // --- FLUJO: GUARDAR ORDEN ---
   const executeSaveOrder = async (name: string) => {
       if (!config?.pricing?.id || !result) return;
 
@@ -137,6 +141,9 @@ function App() {
           fecha_calculo: new Date().toISOString()
       };
 
+      // Detectar si lleva sublimación basado en el costo calculado
+      const tieneSublimacion = (bd?.impresion || 0) > 0;
+
       const orderPayload = {
           cliente_id: Number(selectedClientId),
           configuracion_id: Number(config.pricing.id),
@@ -147,6 +154,10 @@ function App() {
           alto: result.dims?.height || 0,
           bastidor: bd?.bastidorNombre || "Estándar",
           tipo_tela: result.mensaje?.includes('Estructurante') ? 'Estructurante' : 'Normal',
+          
+          // NUEVO CAMPO:
+          tiene_sublimacion: tieneSublimacion,
+
           cantidad: qty,
           precio_unitario: precioUnitario,
           precio_total: totalFinal,
@@ -187,7 +198,9 @@ function App() {
         const p = config.pricing;
         const PRECIO_1000 = p.precio_stitch_1000;
         const PRECIO_COLOR = p.factor_cambio_hilo;
-        const COSTO_PELLON_CM2 = (p.costo_pellon ?? 300) / 1000000; 
+        
+        // Factor base de pellón
+        let FACTOR_PELLON = (p.costo_pellon ?? 300) / 1000000; 
         
         let stitches = apiData.estimatedStitches;
         if (stitches < 2000) stitches = 2000;
@@ -195,30 +208,52 @@ function App() {
         const costoPuntadas = (stitches / 1000) * PRECIO_1000;
         const costoColores = apiData.numColors * PRECIO_COLOR;
 
+        // Calcular área del diseño
         const w = apiData.dims?.width || 0;
         const h = apiData.dims?.height || 0;
-        let bastidor = BASTIDORES_DISPONIBLES[BASTIDORES_DISPONIBLES.length - 1]; 
-        for (const b of BASTIDORES_DISPONIBLES) {
-            if ((w <= b.ancho && h <= b.alto) || (w <= b.alto && h <= b.ancho)) {
-                bastidor = b; break; 
-            }
-        }
+        const areaDiseno = w * h;
 
-        const areaBastidor = bastidor.ancho * bastidor.alto;
-        const costoMatRaw = areaBastidor * COSTO_PELLON_CM2;
-        const costoMateriales = Math.ceil(costoMatRaw / 0.05) * 0.05;
+        // Buscar bastidor adecuado basado en el área del diseño
+        const bastidorObj = BASTIDORES_DISPONIBLES
+          .slice()
+          .sort((a, b) => a.size - b.size)
+          .find(b => areaDiseno <= (b.size ** 2))
+          ?? BASTIDORES_DISPONIBLES[BASTIDORES_DISPONIBLES.length - 1];
 
-        const total = Math.max(costoPuntadas + costoColores + costoMateriales, 10);
+        const areaBastidorReal = bastidorObj.size ** 2;
+        const bastidorNombre = bastidorObj.nombre;
+
+        // Aplicar multiplicador según tamaño del bastidor
+        if (areaBastidorReal <= 450) FACTOR_PELLON *= 3.8;
+        else if (areaBastidorReal <= 900) FACTOR_PELLON *= 3.2;
+        else if (areaBastidorReal <= 1600) FACTOR_PELLON *= 2.5;
+        else FACTOR_PELLON *= 1.5;
+
+        // Calcular costo de pellón y redondear a múltiplo de 0.05
+        const costoPellonCalc = areaBastidorReal * FACTOR_PELLON;
+        const costoPellon = Math.ceil(costoPellonCalc / 0.05) * 0.05;
+
+        // En modo upload/camera solo se calculan: puntadas, colores y pellón
+        const total = costoPuntadas + costoColores + costoPellon;
 
         setResult({
           ...apiData,
           estimatedStitches: stitches,
           precio_sugerido: total,
           breakdown: { 
-              puntadas: costoPuntadas, colores: costoColores, materiales: 0, pellon: costoMateriales,
-              hilos: 0, base: 0, corte: 0, tela: 0, bastidorNombre: bastidor.nombre, cantidadUnidades: 1
+              puntadas: Number(costoPuntadas.toFixed(2)), 
+              colores: Number(costoColores.toFixed(2)), 
+              materiales: 0, 
+              pellon: Number(costoPellon.toFixed(2)),
+              hilos: 0, 
+              base: 0, 
+              corte: 0, 
+              tela: 0,
+              impresion: 0, // Sublimación solo aplica en modo manual
+              bastidorNombre: bastidorNombre, 
+              cantidadUnidades: 1
           },
-          mensaje: `Bastidor: ${bastidor.nombre}\nÁrea: ${areaBastidor} cm²`
+          mensaje: `Bastidor: ${bastidorNombre}\nÁrea: ${areaBastidorReal} cm²`
         });
       } else { setResult(apiData); }
       setManualQuantity(1);
@@ -329,16 +364,16 @@ function App() {
                 result={result} 
                 config={config} 
                 initialQuantity={manualQuantity} 
-                clientName={getSelectedClientName()} 
+                selectedClient={getSelectedClient()} 
                 jobName={currentJobName}
-                onPrintRequest={() => handleRequestAction('print')} // Abre modal nombre
+                onPrintRequest={() => handleRequestAction('print')}
               />
               
               <div style={{marginTop: '1rem', textAlign: 'center', marginBottom: '2rem'}}>
                   <button 
                     className="btn-main" 
                     style={{backgroundColor: selectedClientId ? '#10b981' : '#9ca3af', width:'100%', maxWidth:400}} 
-                    onClick={() => handleRequestAction('save')} // Abre modal nombre
+                    onClick={() => handleRequestAction('save')}
                     disabled={!selectedClientId}
                   >
                       {selectedClientId ? '💾 Guardar Cotización' : 'Selecciona un cliente para guardar'}

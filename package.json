@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "sass": "^1.97.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.1.3"
   }
 }

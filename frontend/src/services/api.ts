@@ -1,6 +1,6 @@
 import type { Config, ProcessResult, LoginResponse, User, Client, Order, Pricing } from '../types';
 
-const API_URL = 'http://192.168.1.211:5000';
+const API_URL = 'http://192.168.1.220:5000';
 
 export const api = {
   // --- CONFIGURACIÓN ---
@@ -50,7 +50,7 @@ export const api = {
   },
 
   saveUser: async (user: Partial<User>) => {
-    const method = user.id ? 'PUT' : 'POST'; // Si tiene ID edita, si no crea
+    const method = user.id ? 'PUT' : 'POST';
     const url = user.id ? `${API_URL}/users/${user.id}` : `${API_URL}/users`;
     
     const res = await fetch(url, {
@@ -58,7 +58,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(user)
     });
-    return res.json();
+    
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Error al guardar usuario');
+    return data;
   },
 
   deleteUser: async (id: number) => {
@@ -81,7 +84,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(client)
     });
-    return res.json();
+    
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Error al guardar cliente');
+    return data;
   },
 
   deleteClient: async (id: number) => {
@@ -93,8 +99,15 @@ export const api = {
       const res = await fetch(`${API_URL}/clients/${clientId}/orders`);
       return res.json();
   },
-  saveOrder: async (orderData: {cliente_id: number, configuracion_id: number, detalles: string}) => {
-      console.log("Enviando orden al backend:", orderData); // DEBUG
+  
+  saveOrder: async (orderData: {
+      cliente_id: number, 
+      configuracion_id: number, 
+      nombre_trabajo: string, 
+      tiene_sublimacion: boolean,
+      [key: string]: any
+  }) => {
+      console.log("Enviando orden al backend:", orderData);
       const res = await fetch(`${API_URL}/orders`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

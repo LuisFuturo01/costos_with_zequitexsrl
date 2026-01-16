@@ -16,7 +16,7 @@ export const AlertModal = ({ isOpen, title, message, type = 'info', onClose }: P
     <div className="modal-overlay" style={{zIndex: 3001}}>
       <div className="modal-card" style={{maxWidth: '350px', textAlign: 'center'}}>
         <h3 style={{color: color, marginBottom: '0.5rem'}}>{title}</h3>
-        <p style={{marginBottom: '1.5rem', color: '#e8f4ef'}}>{message}</p>
+        <p style={{marginBottom: '1.5rem', color: '#000000ff!important'}}>{message}</p>
         <button className="btn-main" onClick={onClose} style={{width: '100%'}}>Entendido</button>
       </div>
     </div>
