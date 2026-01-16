@@ -17,11 +17,11 @@ import { InputModal } from './components/ui/InputModal';
 import { AlertModal } from './components/ui/AlertModal';
 
 const BASTIDORES_DISPONIBLES = [
-  { nombre: "10 cm", size: 10, corte: 0.15 },
-  { nombre: "13 cm", size: 13, corte: 0.25 },
-  { nombre: "16 cm", size: 16, corte: 0.35 },
-  { nombre: "20 cm", size: 20, corte: 0.45 },
-  { nombre: "31 cm", size: 31, corte: 0.65 }
+  { nombre: "9 cm", size: 6.5, corte: 0.15 },
+  { nombre: "12 cm", size: 9.5, corte: 0.25 },
+  { nombre: "15 cm", size: 12.5, corte: 0.35 },
+  { nombre: "18 cm", size: 15.5, corte: 0.45 },
+  { nombre: "30 cm", size: 27.5, corte: 0.65 }
 ];
 
 function App() {
@@ -60,10 +60,8 @@ function App() {
       } catch (e) { console.error(e); }
   };
 
-  const redondearAl05Superior = (valor: number) => {
-    if (valor <= 0) return 0;
-    const centavos = Math.round(valor * 100);
-    return (Math.ceil(centavos / 5) * 5) / 100;
+  const redondeoPrecio = (precio: number) => {
+    return Math.ceil(precio*10)/10;
   };
 
   const getSelectedClient = (): Client | null => {
@@ -116,13 +114,21 @@ function App() {
           executePrint(name);
       }
   };
+
   // --- FLUJO: GUARDAR ORDEN ---
   const executeSaveOrder = async (name: string) => {
       if (!config?.pricing?.id || !result) return;
 
       const bd = result.breakdown as any;
-      const precioUnitario = result.precio_sugerido || 0;
+      const precioUnitarioReal = bd?.precioUnitarioReal || result.precio_sugerido || 0;
       const qty = manualQuantity;
+
+      const CANTIDAD_MINIMA = 6;
+      let precioUnitarioAjustado = precioUnitarioReal;
+      
+      if (qty < CANTIDAD_MINIMA) {
+        precioUnitarioAjustado = precioUnitarioReal * CANTIDAD_MINIMA;
+      }
 
       let discountPercent = 0;
       if (qty >= 501) discountPercent = 0.05;
@@ -130,7 +136,7 @@ function App() {
       else if (qty >= 101) discountPercent = 0.03;
       else if (qty >= 51) discountPercent = 0.02;
 
-      const subtotal = precioUnitario * qty;
+      const subtotal = precioUnitarioAjustado * qty;
       const totalFinal = subtotal - (subtotal * discountPercent);
 
       const fullDataSnapshot = {
@@ -154,12 +160,9 @@ function App() {
           alto: result.dims?.height || 0,
           bastidor: bd?.bastidorNombre || "Estándar",
           tipo_tela: result.mensaje?.includes('Estructurante') ? 'Estructurante' : 'Normal',
-          
-          // NUEVO CAMPO:
           tiene_sublimacion: tieneSublimacion,
-
           cantidad: qty,
-          precio_unitario: precioUnitario,
+          precio_unitario: precioUnitarioAjustado,
           precio_total: totalFinal,
           datos_json: JSON.stringify(fullDataSnapshot)
       };
@@ -196,53 +199,62 @@ function App() {
       const apiData = await api.processImage(payload);
       if (config) {
         const p = config.pricing;
-        const PRECIO_1000 = p.precio_stitch_1000;
-        const PRECIO_COLOR = p.factor_cambio_hilo;
+        const densidadConfig = config?.stitch_density || 55;
+        
+        const PRECIO_1000_PUNTADAS = p.precio_stitch_1000;
+        let PRECIO_CAMBIO_COLOR = p.factor_cambio_hilo;
         
         // Factor base de pellón
         let FACTOR_PELLON = (p.costo_pellon ?? 300) / 1000000; 
         
-        let stitches = apiData.estimatedStitches;
-        if (stitches < 2000) stitches = 2000;
-
-        const costoPuntadas = (stitches / 1000) * PRECIO_1000;
-        const costoColores = apiData.numColors * PRECIO_COLOR;
-
-        // Calcular área del diseño
         const w = apiData.dims?.width || 0;
         const h = apiData.dims?.height || 0;
         const areaDiseno = w * h;
 
-        // Buscar bastidor adecuado basado en el área del diseño
+        // Calcular puntadas
+        let stitches = apiData.estimatedStitches;
+        if (!stitches || stitches === 0) {
+          stitches = Math.round(areaDiseno * densidadConfig * 1.1);
+        }
+        if (stitches < 2000) stitches = 2000;
+
+        // Buscar bastidor adecuado basado en la dimensión máxima
+        const dimensionMaxima = Math.max(w, h);
         const bastidorObj = BASTIDORES_DISPONIBLES
           .slice()
           .sort((a, b) => a.size - b.size)
-          .find(b => areaDiseno <= (b.size ** 2))
+          .find(b => dimensionMaxima <= b.size)
           ?? BASTIDORES_DISPONIBLES[BASTIDORES_DISPONIBLES.length - 1];
 
         const areaBastidorReal = bastidorObj.size ** 2;
         const bastidorNombre = bastidorObj.nombre;
 
-        // Aplicar multiplicador según tamaño del bastidor
-        if (areaBastidorReal <= 450) FACTOR_PELLON *= 3.8;
-        else if (areaBastidorReal <= 900) FACTOR_PELLON *= 3.2;
-        else if (areaBastidorReal <= 1600) FACTOR_PELLON *= 2.5;
-        else FACTOR_PELLON *= 1.5;
+        // Calcular costo de puntadas con cambios de color incluidos
+        if (apiData.numColors > 1) {
+          PRECIO_CAMBIO_COLOR = PRECIO_CAMBIO_COLOR * (apiData.numColors - 1);
+        }
+        const costoPuntadas = redondeoPrecio((stitches / 1000) * (PRECIO_1000_PUNTADAS + PRECIO_CAMBIO_COLOR));
 
-        // Calcular costo de pellón y redondear a múltiplo de 0.05
+        // Aplicar multiplicador de pellón según tamaño del bastidor
+        if (areaBastidorReal <= 42.25) FACTOR_PELLON *= 3.8;
+        else if (areaBastidorReal <= 90.25) FACTOR_PELLON *= 3.5;
+        else if (areaBastidorReal <= 156.25) FACTOR_PELLON *= 3.2;
+        else if (areaBastidorReal <= 240.25) FACTOR_PELLON *= 2.9;
+        else if (areaBastidorReal <= 756.25) FACTOR_PELLON *= 2.6;
+
         const costoPellonCalc = areaBastidorReal * FACTOR_PELLON;
-        const costoPellon = Math.ceil(costoPellonCalc / 0.05) * 0.05;
+        const costoPellon = redondeoPrecio(costoPellonCalc);
 
-        // En modo upload/camera solo se calculan: puntadas, colores y pellón
-        const total = costoPuntadas + costoColores + costoPellon;
+        // En modo upload/camera: solo puntadas (con colores incluidos) y pellón
+        const precioUnitarioReal = costoPuntadas + costoPellon;
 
         setResult({
           ...apiData,
           estimatedStitches: stitches,
-          precio_sugerido: total,
+          precio_sugerido: precioUnitarioReal,
           breakdown: { 
               puntadas: Number(costoPuntadas.toFixed(2)), 
-              colores: Number(costoColores.toFixed(2)), 
+              colores: 0, // Ya está incluido en puntadas
               materiales: 0, 
               pellon: Number(costoPellon.toFixed(2)),
               hilos: 0, 
@@ -251,9 +263,11 @@ function App() {
               tela: 0,
               impresion: 0, // Sublimación solo aplica en modo manual
               bastidorNombre: bastidorNombre, 
-              cantidadUnidades: 1
+              cantidadUnidades: 1,
+              precioUnitarioReal: Number(precioUnitarioReal.toFixed(2)),
+              precioUnitarioAjustado: Number(precioUnitarioReal.toFixed(2))
           },
-          mensaje: `Bastidor: ${bastidorNombre}\nÁrea: ${areaBastidorReal} cm²`
+          mensaje: `Bastidor: ${bastidorNombre}\nÁrea: ${areaBastidorReal.toFixed(2)} cm²`
         });
       } else { setResult(apiData); }
       setManualQuantity(1);

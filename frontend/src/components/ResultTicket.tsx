@@ -7,7 +7,7 @@ interface Props {
   config: Config;
   initialQuantity?: number;
   onPrintRequest: () => void;
-  selectedClient?: Client | null; // CORRECCIÓN: Recibimos el objeto completo
+  selectedClient?: Client | null;
   jobName?: string;
 }
 
@@ -27,8 +27,7 @@ export const ResultTicket = ({
   const [cPhone, setCPhone] = useState('');
   const [jName, setJName] = useState(initialJobName || '');
 
-  // --- CORRECCIÓN CLAVE: Sincronizar datos del cliente ---
-  // Rellena nombre y teléfono automáticamente si vienen de App.tsx
+  // --- SINCRONIZACIÓN DE DATOS DEL CLIENTE ---
   useEffect(() => {
     if (selectedClient) {
         setCName(selectedClient.nombre || '');
@@ -36,16 +35,15 @@ export const ResultTicket = ({
     }
   }, [selectedClient]);
 
-  // Sincronizar cantidad inicial
+  // Sincronizar cantidad inicial solo una vez
   useEffect(() => {
     const bd = result.breakdown as any;
     const manualQty = Number(bd?.cantidadUnidades);
     if (manualQty && manualQty > 0) setQty(manualQty);
     else if (initialQuantity > 0) setQty(initialQuantity);
-  }, [result, initialQuantity]);
+  }, [result]);
 
   // --- CREACIÓN DINÁMICA DEL OBJETO CLIENTE ---
-  // Combina los inputs manuales con el ID original si existe
   const activeClient: Client | null = cName.trim() ? {
     id: selectedClient?.id || 0,
     nombre: cName,
@@ -62,10 +60,27 @@ export const ResultTicket = ({
     return { percent: 0, label: "" };
   };
 
-  const precioUnitarioBase = result.precio_sugerido || 0;
+  // Desglose de costos
+  const bd = result.breakdown as any;
+  
+  // NUEVO: Obtener el precio unitario real
+  const precioUnitarioReal = Number(bd?.precioUnitarioReal) || 0;
+  const CANTIDAD_MINIMA = 6;
+
+  // --- LÓGICA CORREGIDA ---
+  // 1. Definimos las unidades a cobrar: Si qty < 6, cobramos 6. Si no, cobramos qty.
+  const unidadesACobrar = qty < CANTIDAD_MINIMA ? CANTIDAD_MINIMA : qty;
+
+  // 2. Calculamos el subtotal real basado en las unidades a cobrar
+  const precioSubtotal = precioUnitarioReal * unidadesACobrar;
+
+  // 3. Definimos el precio unitario base "visual"
+  // Esto asegura que (UnitarioBase * qty) siempre sea igual al precioSubtotal calculado arriba.
+  // Si qty es 1, 2, 3, 4 o 5, el unitario base parecerá más alto para cubrir el costo mínimo de 6.
+  const precioUnitarioBase = precioSubtotal / (qty > 0 ? qty : 1);
+
   const { percent: discountPercent, label: discountLabel } = getDiscountData(qty);
   
-  const precioSubtotal = precioUnitarioBase * qty;
   const montoDescuento = precioSubtotal * discountPercent;
   const precioFinal = precioSubtotal - montoDescuento;
   const precioUnitarioFinal = precioFinal / (qty > 0 ? qty : 1);
@@ -73,8 +88,6 @@ export const ResultTicket = ({
   const formatMoney = (amount: number) => 
     new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' }).format(amount);
 
-  // Desglose de costos
-  const bd = result.breakdown as any; 
   const costoPuntadas = Number(bd?.puntadas) || 0;
   const costoColores = Number(bd?.colores) || 0;
   const costoTela = Number(bd?.tela) || 0;
@@ -196,39 +209,45 @@ export const ResultTicket = ({
         <div className="detail-section">
           <div className="detail-title">Estructura del Costo (Unitario)</div>
           
-          <div className="breakdown-row">
-            <div className="row-label">
-                <span>Bordado / Puntadas</span>
-                <small>~{Math.round(result.estimatedStitches/1000)}k puntadas</small>
+          {costoPuntadas > 0 && (
+            <div className="breakdown-row">
+              <div className="row-label">
+                  <span>Bordado / Puntadas</span>
+                  <small>~{Math.round(result.estimatedStitches/1000)}k puntadas</small>
+              </div>
+              <span className="price">{formatMoney(costoPuntadas)}</span>
             </div>
-            <span className="price">{formatMoney(costoPuntadas)}</span>
-          </div>
+          )}
 
-          <div className="breakdown-row">
-             <div className="row-label">
-                <span>Cambios de Hilo</span>
-                <small>{result.numColors} colores</small>
+          {costoColores > 0 && (
+            <div className="breakdown-row">
+               <div className="row-label">
+                  <span>Cambios de Hilo</span>
+                  <small>{result.numColors} colores</small>
+              </div>
+              <span className="price">{formatMoney(costoColores)}</span>
             </div>
-            <span className="price">{formatMoney(costoColores)}</span>
-          </div>
+          )}
 
           {costoTela > 0 && (
             <div className="breakdown-row">
               <div className="row-label">
                   <span>Tela Base ({tipoTela})</span>
-                  <small>Calculado s/ Área Diseño</small>
+                  <small>Para aplicación</small>
               </div>
               <span className="price">{formatMoney(costoTela)}</span>
             </div>
           )}
 
-          <div className="breakdown-row">
-            <div className="row-label">
-                <span>Pellón / Insumos</span>
-                <small>Bastidor: {nombreBastidor}</small>
+          {costoPellon > 0 && (
+            <div className="breakdown-row">
+              <div className="row-label">
+                  <span>Pellón / Insumos</span>
+                  <small>Bastidor: {nombreBastidor}</small>
+              </div>
+              <span className="price">{formatMoney(costoPellon)}</span>
             </div>
-            <span className="price">{formatMoney(costoPellon)}</span>
-          </div>
+          )}
 
           {costoCorte > 0 && (
              <div className="breakdown-row">
@@ -240,7 +259,7 @@ export const ResultTicket = ({
              </div>
           )}
 
-          {tieneSublimacion && costoImpresion > 0 && (
+          {costoImpresion > 0 && (
              <div className="breakdown-row">
                 <div className="row-label">
                    <span>Sublimación Digital</span>
@@ -250,10 +269,30 @@ export const ResultTicket = ({
              </div>
           )}
 
-          <div className="breakdown-row total-unit-row mt-3 pt-2 border-t border-dashed border-gray-300">
-             <span>Costo Unitario Base</span>
-             <strong>{formatMoney(precioUnitarioBase)}</strong>
-          </div>
+          {/* MOSTRAR AMBOS PRECIOS SI LA CANTIDAD ES MENOR A 6 */}
+          {qty < CANTIDAD_MINIMA ? (
+            <>
+              <div className="breakdown-row mt-3 pt-2 border-t border-dashed border-gray-300" style={{ opacity: 0.6 }}>
+                <div className="row-label">
+                  <span>Costo Real ({qty} {qty === 1 ? 'unidad' : 'unidades'})</span>
+                  <small style={{ color: '#ef4444' }}>No disponible - Cantidad mínima: {CANTIDAD_MINIMA}</small>
+                </div>
+                <span style={{ color: '#ff0000ff' }}>{formatMoney(precioUnitarioReal)}</span>
+              </div>
+              <div className="breakdown-row total-unit-row" style={{ backgroundColor: '#fef3c7', padding: '8px', borderRadius: '4px', marginTop: '4px' }}>
+                <div className="row-label">
+                  <span>Costo Unitario Base</span>
+                  <small style={{ color: '#d97706', fontWeight: '600' }}>Ajustado al mínimo de producción</small>
+                </div>
+                <strong style={{ color: '#d97706' }}>{formatMoney(precioUnitarioBase)}</strong>
+              </div>
+            </>
+          ) : (
+            <div className="breakdown-row total-unit-row mt-3 pt-2 border-t border-dashed border-gray-300">
+               <span>Costo Unitario Base</span>
+               <strong>{formatMoney(precioUnitarioBase)}</strong>
+            </div>
+          )}
         </div>
 
         <div className="divider-dashed"></div>
@@ -291,12 +330,11 @@ export const ResultTicket = ({
         </div>
 
         <div className="ticket-footer">
-          * Cotización válida por 15 días.
+          * Cotización válida por 15 días. {qty < CANTIDAD_MINIMA && `Cantidad mínima de producción: ${CANTIDAD_MINIMA} unidades.`}
         </div>
       </div>
 
       <div className="ticket-actions">
-        {/* CORRECCIÓN: Pasamos el objeto activeClient completo */}
         <ShareableTicket 
            result={result}
            config={config}

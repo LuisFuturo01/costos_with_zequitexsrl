@@ -47,11 +47,11 @@ export const ManualMode = ({ onEstimate }: Props) => {
 
   // BASTIDORES - ahora con tiempos en segundos
   const BASTIDORES_LISTA = [
-    { size: 10, name: "10 cm", tiempoCorteSegundos: 5.3 },
-    { size: 13, name: "13 cm", tiempoCorteSegundos: 8.8 },
-    { size: 16, name: "16 cm", tiempoCorteSegundos: 12.4 },
-    { size: 20, name: "20 cm", tiempoCorteSegundos: 15.9 },
-    { size: 31, name: "31 cm", tiempoCorteSegundos: 22.9 }
+    { size: 6.5,  name:  "9 cm", tiempoCorteSegundos: 3.53 },
+    { size: 9.5,  name: "12 cm", tiempoCorteSegundos: 7.06 },
+    { size: 12.5, name: "15 cm", tiempoCorteSegundos: 10.59 },
+    { size: 15.5, name: "18 cm", tiempoCorteSegundos: 14.12 },
+    { size: 27.5, name: "30 cm", tiempoCorteSegundos: 17.65 }
   ];
 
   const questions = [
@@ -123,7 +123,9 @@ export const ManualMode = ({ onEstimate }: Props) => {
       setStep(3);
       return;
     }
-
+  const redondeoPrecio = (precio: number) => {
+    return Math.ceil(precio*10)/10;
+  };
     const areaDiseno = data.width * data.height;
 
     // 1. CONFIG
@@ -131,7 +133,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
     const densidadConfig = appConfig?.stitch_density || 55;
 
     const PRECIO_1000_PUNTADAS = precios?.precio_stitch_1000 ?? 0;
-    const PRECIO_CAMBIO_COLOR = precios?.factor_cambio_hilo ?? 0;
+    let PRECIO_CAMBIO_COLOR = precios?.factor_cambio_hilo ?? 0;
     const PRECIO_IMPRESION = precios?.costo_impresion ?? 0;
     const COSTO_ROLLO = precios?.costo_rollo ?? 0;
     const PRECIO_CORTE_POR_60_SEG = precios?.corte_impresion ?? 0;
@@ -148,14 +150,15 @@ export const ManualMode = ({ onEstimate }: Props) => {
     let finalStitches = 0;
     if (data.stitches > 0) finalStitches = data.stitches;
     else finalStitches = Math.round(areaDiseno * densidadConfig * 1.1);
-    if (finalStitches < 2000) finalStitches = 2000;
 
-    // 3. BASTIDOR
+    // 3. BASTIDOR - CORREGIDO: Comparar dimensiones, no área
+    const dimensionMaximaDiseno = Math.max(data.width, data.height);
+    
     const bastidorObj =
       BASTIDORES_LISTA
         .slice()
         .sort((a, b) => a.size - b.size)
-        .find(b => areaDiseno <= (b.size ** 2))
+        .find(b => dimensionMaximaDiseno <= b.size)
       ?? BASTIDORES_LISTA[BASTIDORES_LISTA.length - 1];
 
     const areaBastidorReal = bastidorObj.size ** 2;
@@ -163,28 +166,42 @@ export const ManualMode = ({ onEstimate }: Props) => {
     const tiempoCorteSegundos = bastidorObj.tiempoCorteSegundos;
 
     // 4. COSTOS
-    const costoPuntadas = (finalStitches / 1000) * PRECIO_1000_PUNTADAS;
-    const costoColores = data.colors * PRECIO_CAMBIO_COLOR;
+    if(data.colors>1){
+      PRECIO_CAMBIO_COLOR = PRECIO_CAMBIO_COLOR * (data.colors-1);
+    }
+    const costoPuntadas = redondeoPrecio((finalStitches) * ((PRECIO_1000_PUNTADAS+PRECIO_CAMBIO_COLOR)/1000));
 
     // Pellón
-    if(areaBastidorReal<=450) FACTOR_PELLON *= 3.8;
-    else if(areaBastidorReal<=900) FACTOR_PELLON *= 3.2;
-    else if(areaBastidorReal<=1600) FACTOR_PELLON *= 2.5;
-    else FACTOR_PELLON *= 1.5;
+    if(areaBastidorReal<=42.25) FACTOR_PELLON *= 3.8;
+    else if(areaBastidorReal<=90.25) FACTOR_PELLON *= 3.5;
+    else if(areaBastidorReal<=156.25) FACTOR_PELLON *= 3.2;
+    else if(areaBastidorReal<=240.25) FACTOR_PELLON *= 2.9;
+    else if(areaBastidorReal<=756.25) FACTOR_PELLON *= 2.6;
 
     const costoPellonCalc = areaBastidorReal * FACTOR_PELLON;
-    const costoPellon = Math.ceil(costoPellonCalc / 0.05) * 0.05;
+    const costoPellon = redondeoPrecio(costoPellonCalc);
 
     // CORRECCIÓN 1: Tela solo si tiene aplicación
     let costoTela = 0;
     if (data.hasApplication === 'Si') {
       costoTela = Number((areaDiseno * precioTelaCm2).toFixed(2));
-      if(areaDiseno<=450) costoTela *= 2.05;
-      else if(areaDiseno<=900) costoTela *= 2.2;
-      else if(areaDiseno<=1600) costoTela *= 2.4;
-      else costoTela *= 2.6;
+      if(data.fabricType === 'Estructurante') {
+        if(areaBastidorReal<=42.25) costoTela *= 1.5;
+        else if(areaBastidorReal<=90.25) costoTela *= 1.4;
+        else if(areaBastidorReal<=156.25) costoTela *= 1.3;
+        else if(areaBastidorReal<=240.25) costoTela *= 1.2;
+        else if(areaBastidorReal<=756.25) costoTela *= 1.1;
+      }
+      else if(data.fabricType === 'Normal') {
+        if(areaBastidorReal<=42.25) costoTela *= 1.5;
+        else if(areaBastidorReal<=90.25) costoTela *= 1.4;
+        else if(areaBastidorReal<=156.25) costoTela *= 1.3;
+        else if(areaBastidorReal<=240.25) costoTela *= 1.2;
+        else if(areaBastidorReal<=756.25) costoTela *= 1.1;
+      }
     }
-
+    costoTela = redondeoPrecio(costoTela);
+    
     // CORRECCIÓN 2: Cálculo del precio de corte basado en tiempo
     // Formula: (tiempoCorteSegundos / 60) * PRECIO_CORTE_POR_60_SEG
     let costoCorte = 0;
@@ -201,9 +218,6 @@ export const ManualMode = ({ onEstimate }: Props) => {
       const ROLLO_ANCHO_CM = 100;
       const ROLLO_LARGO_CM = 10000; // 100 metros
       const AREA_TOTAL_ROLLO = ROLLO_ANCHO_CM * ROLLO_LARGO_CM; // 1,000,000 cm²
-
-      // Dimensiones de una hoja comercial (referencia de cobro)
-      const HOJA_COMERCIAL_CM = 30 * 30; // 900 cm²
 
       // Dimensiones del diseño
       const imgW = data.width;
@@ -232,14 +246,8 @@ export const ManualMode = ({ onEstimate }: Props) => {
       // 5️⃣ Costo proporcional al papel cortado (regla de 3 simple)
       costoImpresion = (areaUsadaRollo / AREA_TOTAL_ROLLO) * COSTO_ROLLO;
 
-      // Aplicar un mínimo comercial si el costo es muy bajo
-      const COSTO_MINIMO_IMPRESION = PRECIO_IMPRESION * 0.25; // 25% del precio de una hoja 30x30
-      if (costoImpresion < COSTO_MINIMO_IMPRESION) {
-        costoImpresion = COSTO_MINIMO_IMPRESION;
-      }
-
-      // Redondeo comercial al múltiplo de 0.05 superior
-      costoImpresion = Math.ceil(costoImpresion / 0.05) * 0.05;
+      // Redondeo comercial
+      costoImpresion = redondeoPrecio(costoImpresion);
 
       // Log para debugging
       console.log('📊 Cálculo de Sublimación:', {
@@ -260,9 +268,20 @@ export const ManualMode = ({ onEstimate }: Props) => {
       console.log('❌ Sublimación NO marcada');
     }
 
-    // 6. TOTAL
-    const precioTotal = costoPuntadas + costoColores + costoPellon + costoTela + costoCorte + costoImpresion;
-    const precioFinal = precioTotal;
+    // 6. TOTAL CON AJUSTE DE CANTIDAD MÍNIMA
+    const CANTIDAD_MINIMA = 6;
+    const precioTotal = costoPuntadas + costoPellon + costoTela + costoCorte + costoImpresion;
+    
+    // Si la cantidad es menor a 6, calcular precio como si fueran 6 unidades
+    let precioUnitarioReal = precioTotal;
+    let precioUnitarioAjustado = precioTotal;
+    
+    if (data.quantity < CANTIDAD_MINIMA) {
+      // El precio ajustado es el costo de hacer 6 unidades (se cobra lo mismo sin importar si pide 1, 2, 3, 4 o 5)
+      precioUnitarioAjustado = precioTotal * CANTIDAD_MINIMA;
+    }
+    
+    const precioFinal = precioUnitarioAjustado;
 
     let mensaje = `Tela: ${data.fabricType}`;
     if (data.hasApplication === 'Si') mensaje += ' • Con Apliqué';
@@ -271,12 +290,15 @@ export const ManualMode = ({ onEstimate }: Props) => {
     console.log("✅ Datos finales a enviar:", {
       cantidad: data.quantity,
       precioTotal: precioFinal.toFixed(2),
+      precioUnitarioReal: precioUnitarioReal.toFixed(2),
+      precioUnitarioAjustado: precioUnitarioAjustado.toFixed(2),
       costoTela: costoTela.toFixed(2),
       costoCorte: costoCorte.toFixed(2),
       tiempoCorteSegundos: tiempoCorteSegundos,
       costoImpresion: costoImpresion.toFixed(2),
       tieneAplicacion: data.hasApplication === 'Si',
-      tieneSublimacion: data.hasSublimation === 'Si'
+      tieneSublimacion: data.hasSublimation === 'Si',
+      seAplicoMinimo: data.quantity < CANTIDAD_MINIMA
     });
 
     const manualResult: ProcessResult = {
@@ -294,7 +316,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
       
       breakdown: {
           puntadas: Number(costoPuntadas.toFixed(2)),
-          colores: Number(costoColores.toFixed(2)),
+          colores: 0,
           materiales: 0,
           base: 0,
           hilos: 0,
@@ -303,7 +325,9 @@ export const ManualMode = ({ onEstimate }: Props) => {
           corte: Number(costoCorte.toFixed(2)),
           bastidorNombre: bastidorNombre,
           impresion: Number(costoImpresion.toFixed(2)),
-          cantidadUnidades: data.quantity 
+          cantidadUnidades: data.quantity,
+          precioUnitarioReal: Number(precioUnitarioReal.toFixed(2)),
+          precioUnitarioAjustado: Number(precioUnitarioAjustado.toFixed(2))
       } as any
     };
 

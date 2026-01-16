@@ -887,13 +887,11 @@ select.styled-input:hover:not(:disabled):not(:focus) {
   font-size: var(--font-size-sm);
   border-bottom: 1px solid var(--bg-page);
   .row-label{
-    span{
-
-    }
+    
     small{
       margin-left: .4rem;
       color: #0f6930;
-      font-size: .5rem;
+      font-size: .8rem;
     }
   }
 }
@@ -1500,7 +1498,7 @@ select.styled-input:hover:not(:disabled):not(:focus) {
         align-items: baseline;
         gap: 5px;
         span { font-size: 9pt !important; font-weight: bold !important; }
-        small { font-size: 8pt !important; color: #333 !important; }
+        small { font-size: 10pt !important; color: #333 !important; }
       }
       .price { font-size: 9pt !important; font-family: monospace; }
     }
