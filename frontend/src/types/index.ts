@@ -57,6 +57,7 @@ export interface Client {
 }
 
 export interface Pricing {
+  id?: number;
   precio_stitch_1000: number;
   factor_cambio_hilo: number;
   costo_hilo_bordar: number;
@@ -65,7 +66,6 @@ export interface Pricing {
   tela_estructurante: number;
   tela_normal: number;
   rollo_papel: number;
-  costo_rollo: number;
   costo_impresion: number;
   fecha_modificacion?: string; 
   activo?: boolean;
@@ -78,14 +78,14 @@ export interface LoginResponse {
   user?: User;
 }
 
-export interface Order {
+// Cotización (antes Order)
+export interface Cotizacion {
   id: number;
   cliente_id: number;
   configuracion_id: number;
-  nombre_trabajo: string; // Nuevo
+  nombre_trabajo: string;
   fecha_pedido: string;
   
-  // Nuevos campos estructurados
   puntadas: number;
   colores: number;
   ancho: number;
@@ -97,12 +97,30 @@ export interface Order {
   precio_unitario: number;
   precio_total: number;
   
-  // El JSON con el desglose completo
   datos_json: string; 
-  
-  // Mantenemos detalles por si acaso, o lo quitamos si ya no lo usas en el backend
   detalles?: string; 
 }
 
+// Alias para compatibilidad con código existente
+export type Order = Cotizacion;
+
+// Orden (nueva tabla)
+export type EstadoOrden = 'en_proceso' | 'cancelado' | 'entregado';
+
+export interface Orden {
+  id: number;
+  cotizacion_id: number;
+  estado: EstadoOrden;
+  fecha_entrega: string | null;
+  detail: string | null;
+  fecha_creacion: string;
+  // Datos expandidos de la cotización (enviados por el backend)
+  nombre_trabajo?: string;
+  cliente_nombre?: string;
+  precio_total?: number;
+  cantidad?: number;
+  fecha_pedido?: string;
+}
+
 export type TabMode = 'upload' | 'camera' | 'manual';
-export type View = 'main' | 'config' | 'login';
+export type View = 'main' | 'config' | 'login' | 'ordenes';

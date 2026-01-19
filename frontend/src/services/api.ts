@@ -1,4 +1,4 @@
-import type { Config, ProcessResult, LoginResponse, User, Client, Order, Pricing } from '../types';
+import type { Config, ProcessResult, LoginResponse, User, Client, Pricing, Orden, Cotizacion } from '../types';
 
 const API_URL = 'http://192.168.1.220:5000';
 
@@ -95,27 +95,66 @@ export const api = {
     return res.json();
   },
 
-  getClientOrders: async (clientId: number): Promise<Order[]> => {
+  getClientOrders: async (clientId: number): Promise<Cotizacion[]> => {
       const res = await fetch(`${API_URL}/clients/${clientId}/orders`);
       return res.json();
   },
+
+  getClientOrdenes: async (clientId: number): Promise<Orden[]> => {
+      const res = await fetch(`${API_URL}/clients/${clientId}/ordenes`);
+      return res.json();
+  },
   
+  // --- GESTIÓN DE COTIZACIONES ---
   saveOrder: async (orderData: {
       cliente_id: number, 
       configuracion_id: number, 
       nombre_trabajo: string, 
       tiene_sublimacion: boolean,
-      [key: string]: any
+      [key: string]: unknown
   }) => {
-      console.log("Enviando orden al backend:", orderData);
+      console.log("Enviando cotización al backend:", orderData);
       const res = await fetch(`${API_URL}/orders`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(orderData)
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || 'Error al guardar orden');
+      if (!res.ok || !data.success) throw new Error(data.message || 'Error al guardar cotización');
       return data;
+  },
+
+  // --- GESTIÓN DE ÓRDENES (Nueva funcionalidad) ---
+  getOrdenes: async (): Promise<Orden[]> => {
+      const res = await fetch(`${API_URL}/ordenes`);
+      return res.json();
+  },
+
+  createOrden: async (data: { cotizacion_id: number, fecha_entrega?: string, detail?: string }) => {
+      const res = await fetch(`${API_URL}/ordenes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.message || 'Error al crear orden');
+      return result;
+  },
+
+  updateOrden: async (id: number, data: Partial<Orden>) => {
+      const res = await fetch(`${API_URL}/ordenes/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message || 'Error al actualizar orden');
+      return result;
+  },
+
+  deleteOrden: async (id: number) => {
+      const res = await fetch(`${API_URL}/ordenes/${id}`, { method: 'DELETE' });
+      return res.json();
   },
 
   // --- PROCESAMIENTO ---

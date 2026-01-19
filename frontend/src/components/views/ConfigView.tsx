@@ -1,9 +1,21 @@
-import { useState, useEffect, FormEvent } from 'react';
-import type { Config, View, User, Client, Order, Pricing } from '../../types'; // Ajusté Pricing type si se llama PriceConfig en tu types, puse Pricing para coincidir con tu api.ts
+import { useState, useEffect, type FormEvent } from 'react';
+import type { Config, View, User, Client, Order, Pricing, Orden } from '../../types';
 import { api } from '../../services/api';
 // Componentes UI
 import { WorkClientView } from './WorkClientView';
 import { AlertModal } from '../ui/AlertModal';
+import { OrdenesView } from './OrdenesView';
+// Iconos SVG
+import cotizacionIcon from '../../assets/images/cotizacion.svg';
+import ordenIcon from '../../assets/images/orden.svg';
+import closeIcon from '../../assets/images/close.svg';
+import viewIcon from '../../assets/images/view.svg';
+import editIcon from '../../assets/images/edit.svg';
+import deleteIcon from '../../assets/images/delete.svg';
+import adminIcon from '../../assets/images/admin.svg';
+import checkIcon from '../../assets/images/check.svg';
+import cancelIcon from '../../assets/images/cancel.svg';
+import processIcon from '../../assets/images/process.svg';
 
 interface Props {
   config: Config;
@@ -16,21 +28,21 @@ interface Props {
 const PRICE_FIELDS = [
   { key: 'precio_stitch_1000', label: '1.000 puntadas' },
   { key: 'factor_cambio_hilo', label: 'Factor Cambio Hilo' },
-  { key: 'costo_hilo_bordar', label: 'Hilo Bordar' },
-  { key: 'costo_hilo_bobina', label: 'Hilo Bobina' },
-  { key: 'costo_pellon', label: 'Rollo de pellon' },
-  { key: 'tela_estructurante', label: 'Tela Estructurante por metro' },
-  { key: 'tela_normal', label: 'Tela Normal por metro' },
-  { key: 'rollo_papel', label: 'Rollo de papel' },
-  { key: 'costo_impresion', label: 'Impresión' },
-  { key: 'corte_impresion', label: 'Corte de Aplicación por minuto' }
+  { key: 'costo_hilo_bordar', label: 'Costo Hilo Bordar' },
+  { key: 'costo_hilo_bobina', label: 'Costo Hilo Bobina' },
+  { key: 'costo_pellon', label: 'Costo Rollo de pellon' },
+  { key: 'tela_estructurante', label: 'Costo Tela Estructurante por metro' },
+  { key: 'tela_normal', label: 'Costo Tela Normal por metro' },
+  { key: 'rollo_papel', label: 'Costo Rollo de papel' },
+  { key: 'costo_impresion', label: 'Costo Impresión (30x30)' },
+  { key: 'corte_impresion', label: 'Costo Corte de Aplicación por minuto' }
 ];
 
 export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentUser }: Props) => {
-  const isAdmin = currentUser?.role === 'administrador' || currentUser?.role === 'admin';
+  const isAdmin = currentUser?.role === 'administrador';
   const canManageClients = true; 
 
-  const [activeTab, setActiveTab] = useState<'precios' | 'historial' | 'usuarios' | 'clientes'>('precios');
+  const [activeTab, setActiveTab] = useState<'precios' | 'historial' | 'usuarios' | 'clientes' | 'ordenes'>('precios');
   
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -39,12 +51,20 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
   
   const [selectedClientForOrders, setSelectedClientForOrders] = useState<Client | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
+  const [viewingDocType, setViewingDocType] = useState<'cotizacion' | 'orden'>('cotizacion');
 
   const [editingUser, setEditingUser] = useState<Partial<User> | null>(null);
   const [editingClient, setEditingClient] = useState<Partial<Client> | null>(null);
 
   const [confirmModal, setConfirmModal] = useState<{isOpen: boolean, id: number, type: 'user'|'client'}>({isOpen: false, id: 0, type: 'user'});
   const [alertInfo, setAlertInfo] = useState<{open: boolean, msg: string}>({open: false, msg: ''});
+
+  const [clientOptionsModal, setClientOptionsModal] = useState<Client | null>(null);
+  const [viewMode, setViewMode] = useState<'cotizaciones' | 'ordenes' | null>(null);
+  const [clientOrdenes, setClientOrdenes] = useState<Orden[]>([]);
+  
+  const [orderFromCotizacion, setOrderFromCotizacion] = useState<Order | null>(null);
+  const [newOrderFechaEntrega, setNewOrderFechaEntrega] = useState('');
 
   useEffect(() => {
     if (activeTab === 'usuarios' && isAdmin) loadUsers();
@@ -62,36 +82,67 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
       } catch (e) { console.error("Error historial", e); }
   };
 
-  const handleShowOrders = async (client: Client) => {
+  const handleShowClientOptions = (client: Client) => {
+    setClientOptionsModal(client);
+    setViewMode(null);
+  };
+
+  const loadClientCotizaciones = async (client: Client) => {
       setSelectedClientForOrders(client);
+      setClientOptionsModal(null);
+      setViewMode('cotizaciones');
       setClientOrders([]); 
       try {
           const orders = await api.getClientOrders(client.id);
           setClientOrders(orders);
-      } catch (e) { setAlertInfo({open: true, msg: "Error cargando órdenes"}); }
+      } catch { setAlertInfo({open: true, msg: "Error cargando cotizaciones"}); }
   };
 
-  // --- LOGICA PARA CLONAR/GUARDAR NUEVA COTIZACIÓN ---
+  const loadClientOrdenes = async (client: Client) => {
+      setSelectedClientForOrders(client);
+      setClientOptionsModal(null);
+      setViewMode('ordenes');
+      setClientOrdenes([]);
+      try {
+          const clientOrdenesData = await api.getClientOrdenes(client.id);
+          setClientOrdenes(clientOrdenesData);
+      } catch { setAlertInfo({open: true, msg: "Error cargando órdenes"}); }
+  };
+
+  const handleCreateOrderFromCotizacion = async () => {
+    if (!orderFromCotizacion) return;
+    try {
+      await api.createOrden({
+        cotizacion_id: orderFromCotizacion.id,
+        fecha_entrega: newOrderFechaEntrega || undefined
+      });
+      setAlertInfo({ open: true, msg: '✅ Orden creada correctamente' });
+      setOrderFromCotizacion(null);
+      setNewOrderFechaEntrega('');
+      if (selectedClientForOrders) {
+        const updatedOrders = await api.getClientOrders(selectedClientForOrders.id);
+        setClientOrders(updatedOrders);
+      }
+    } catch {
+      setAlertInfo({ open: true, msg: 'Error al crear orden' });
+    }
+  };
+
   const handleCloneOrder = async (newOrderData: any) => {
       try {
-          // Asignar el ID del cliente actual
           const payload = {
               ...newOrderData,
               cliente_id: selectedClientForOrders?.id,
               configuracion_id: config.pricing.id 
-          }; // Corregido: 'id' suele estar en pricing, verifica tu interface Pricing
-
+          }; 
           await api.saveOrder(payload);
           setAlertInfo({ open: true, msg: '✅ Nueva cotización generada correctamente' });
           setViewingOrder(null); 
-          
           if (selectedClientForOrders) {
               const updatedOrders = await api.getClientOrders(selectedClientForOrders.id);
               setClientOrders(updatedOrders);
           }
-      } catch (error: any) {
-          setAlertInfo({ open: true, msg: `Error: ${error.message}` });
-      }
+      } catch { setAlertInfo({ open: true, msg: 'Error al generar cotización' }); }
   };
 
   const updatePrice = (field: string, val: number) => {
@@ -105,41 +156,36 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
           setAlertInfo({open: true, msg: 'Configuración actualizada correctamente'});
           const newConfig = await api.getConfig();
           setConfig(newConfig);
-      } catch (error) { setAlertInfo({open: true, msg: 'Error al guardar'}); }
+      } catch { setAlertInfo({open: true, msg: 'Error al guardar'}); }
   };
 
-  // --- MANEJO DE USUARIOS (EMPLEADOS) ---
   const handleSaveUser = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
     try {
         const res = await api.saveUser(editingUser);
-        // Verificar éxito basado en tu API
         if (res.success || res.id) { 
             setEditingUser(null); 
             loadUsers(); 
             setAlertInfo({open: true, msg: 'Usuario guardado correctamente'});
-        } else {
-            setAlertInfo({open: true, msg: res.message || 'Error al guardar usuario'});
         }
-    } catch (error: any) {
-        setAlertInfo({open: true, msg: error.message});
+    } catch {
+        setAlertInfo({open: true, msg: 'Error al guardar usuario'});
     }
   };
   
   const requestDeleteUser = (id: number) => setConfirmModal({isOpen: true, id, type: 'user'});
 
-  // --- MANEJO DE CLIENTES ---
   const handleSaveClient = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingClient) return;
     try {
         await api.saveClient(editingClient);
         setEditingClient(null);
-        await loadClients(); // Esperamos a que cargue
+        await loadClients(); 
         setAlertInfo({open: true, msg: 'Cliente guardado correctamente'});
-    } catch (error: any) {
-        setAlertInfo({open: true, msg: error.message || 'Error al guardar cliente'});
+    } catch {
+        setAlertInfo({open: true, msg: 'Error al guardar cliente'});
     }
   };
 
@@ -180,13 +226,13 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
       />
 
       {confirmModal.isOpen && (
-          <div className="modal-overlay" style={{zIndex: 3002}}>
-              <div className="modal-card" style={{maxWidth: '350px', textAlign: 'center'}}>
-                  <h3 style={{color: '#ef4444', marginBottom: '1rem'}}>¿Estás seguro?</h3>
-                  <p style={{marginBottom: '1.5rem', color: '#000000ff'}}>Esta acción eliminará el registro permanentemente.</p>
-                  <div className="modal-actions" style={{justifyContent: 'center'}}>
+          <div className="modal-overlay">
+              <div className="modal-card modal-sm text-center">
+                  <h3 className="text-danger mb-2">¿Estás seguro?</h3>
+                  <p className="mb-3 text-dark">Esta acción eliminará el registro permanentemente.</p>
+                  <div className="modal-actions justify-center">
                       <button className="btn-secondary" onClick={() => setConfirmModal({...confirmModal, isOpen: false})}>Cancelar</button>
-                      <button className="btn-main" style={{background: '#ef4444', borderColor: '#ef4444'}} onClick={confirmDelete}>Eliminar</button>
+                      <button className="btn-main btn-danger" onClick={confirmDelete}>Eliminar</button>
                   </div>
               </div>
           </div>
@@ -198,6 +244,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
             {canManageClients && (
                 <button className={`tab ${activeTab === 'clientes' ? 'active' : ''}`} onClick={() => setActiveTab('clientes')}>Clientes</button>
             )}
+            <button className={`tab ${activeTab === 'ordenes' ? 'active' : ''}`} onClick={() => setActiveTab('ordenes')}>Órdenes</button>
             {isAdmin && (
                 <>
                     <button className={`tab ${activeTab === 'historial' ? 'active' : ''}`} onClick={() => setActiveTab('historial')}>Historial</button>
@@ -206,13 +253,21 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
             )}
         </div>
 
-        {viewingOrder && selectedClientForOrders && (
+        {/* TAB ÓRDENES */}
+        {activeTab === 'ordenes' && (
+            <div className="card">
+                <OrdenesView config={config} />
+            </div>
+        )}
+
+        {viewingOrder && (
             <WorkClientView 
                 order={viewingOrder} 
-                clientName={selectedClientForOrders.nombre} 
+                clientName={selectedClientForOrders?.nombre || viewingOrder.cliente_nombre || 'Cliente'} 
                 onClose={() => setViewingOrder(null)}
                 config={config} 
                 onSaveNewOrder={handleCloneOrder}
+                docType={viewingDocType}
             />
         )}
 
@@ -232,7 +287,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                         </div>
                     ))}
                 </div>
-                {isAdmin && <button className="btn-main" style={{marginTop: 20}} onClick={saveGeneralConfig}>Guardar Cambios</button>}
+                {isAdmin && <button className="btn-main mt-3" onClick={saveGeneralConfig}>Guardar Cambios</button>}
             </div>
         )}
 
@@ -244,36 +299,123 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                     <button className="btn-main sm" onClick={()=>setEditingClient({})}>+ Nuevo</button>
                 </div>
 
-                {selectedClientForOrders && (
+                {/* Modal de opciones del cliente */}
+                {clientOptionsModal && (
                     <div className="modal-overlay">
-                        <div className="modal-card" style={{maxWidth: '800px'}}>
-                            <div className="card-header">
-                                <h3>Órdenes: {selectedClientForOrders.nombre}</h3>
-                                <button className="icon-btn" onClick={()=>setSelectedClientForOrders(null)}>✕</button>
+                        <div className="modal-card modal-sm text-center">
+                            <h3 className="mb-3">Cliente: {clientOptionsModal.nombre}</h3>
+                            <div className="flex-column gap-2">
+                                <button className="btn-main btn-lg-block" onClick={() => loadClientCotizaciones(clientOptionsModal)}>
+                                    <img src={cotizacionIcon} className="icono-img icono-cotizacion" alt="cotización" /> Ver Cotizaciones
+                                </button>
+                                <button className="btn-secondary btn-lg-block" onClick={() => loadClientOrdenes(clientOptionsModal)}>
+                                    <img src={ordenIcon} className="icono-img icono-orden" alt="orden" /> Ver Órdenes
+                                </button>
                             </div>
-                            <div style={{maxHeight:'400px', overflowY:'auto', margin:'10px 0'}}>
+                            <button className="btn-secondary mt-3 w-100" onClick={() => setClientOptionsModal(null)}>
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modal de cotizaciones del cliente */}
+                {selectedClientForOrders && viewMode === 'cotizaciones' && (
+                    <div className="modal-overlay">
+                        <div className="modal-card modal-lg">
+                            <div className="card-header">
+                                <h3><img src={cotizacionIcon} className="icono-img icono-cotizacion" alt="cotización" /> Cotizaciones: {selectedClientForOrders.nombre}</h3>
+                                <button className="icon-btn" onClick={() => { setSelectedClientForOrders(null); setViewMode(null); }}><img src={closeIcon} className="icono-img icono-close icono-no-margin" alt="cerrar" /></button>
+                            </div>
+                            <div className="table-container-scroll">
                                 {clientOrders.length === 0 ? <p>No hay cotizaciones guardadas.</p> : (
-                                    <div className="data-table">
+                                    <table className="data-table">
                                         <thead>
-                                            <div>
+                                            <tr>
                                                 <th>Fecha</th>
                                                 <th>Trabajo</th>
-                                                <th style={{textAlign: 'right'}}>Acción</th>
-                                            </div>
+                                                <th className="text-right">Acción</th>
+                                            </tr>
                                         </thead>
                                         <tbody>
                                             {clientOrders.map(o => (
-                                                <div key={o.id}>
-                                                    <span>{new Date(o.fecha_pedido).toLocaleDateString()}</span>
-                                                    <span style={{fontSize:'0.9rem', fontWeight: 'bold', color: '#fff'}}>{o.nombre_trabajo}</span>
-                                                    <span style={{textAlign: 'right'}}>
-                                                        <button className="btn-secondary sm" onClick={() => setViewingOrder(o)}>👁️ Ver</button>
-                                                    </span>
-                                                </div>
+                                                <tr key={o.id}>
+                                                    <td>{new Date(o.fecha_pedido).toLocaleDateString()}</td>
+                                                    <td className="font-bold text-sm">{o.nombre_trabajo}</td>
+                                                    <td className="text-right">
+                                                        <button className="btn-secondary sm" onClick={() => { setViewingOrder(o); setViewingDocType('cotizacion'); }}><img src={viewIcon} className="icono-img icono-view" alt="ver" /> Ver</button>
+                                                        <button className="btn-main sm" onClick={() => setOrderFromCotizacion(o)}><img src={ordenIcon} className="icono-img icono-orden" alt="orden" /> Ordenar</button>
+                                                    </td>
+                                                </tr>
                                             ))}
                                         </tbody>
-                                    </div>
+                                    </table>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modal de órdenes del cliente */}
+                {selectedClientForOrders && viewMode === 'ordenes' && (
+                    <div className="modal-overlay">
+                        <div className="modal-card modal-lg">
+                            <div className="card-header">
+                                <h3><img src={ordenIcon} className="icono-img icono-orden" alt="orden" /> Órdenes: {selectedClientForOrders.nombre}</h3>
+                                <button className="icon-btn" onClick={() => { setSelectedClientForOrders(null); setViewMode(null); }}><img src={closeIcon} className="icono-img icono-close icono-no-margin" alt="cerrar" /></button>
+                            </div>
+                            <div className="table-container-scroll">
+                                {clientOrdenes.length === 0 ? <p>No hay órdenes para este cliente.</p> : (
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Trabajo</th>
+                                                <th>Estado</th>
+                                                <th>Entrega</th>
+                                                <th className="text-right">Acción</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {clientOrdenes.map(o => (
+                                                <tr key={o.id}>
+                                                    <td className="font-bold">{o.nombre_trabajo || 'Sin nombre'}</td>
+                                                    <td>
+                                                        <span className={`status-badge status-${o.estado}`}>
+                                                            {o.estado === 'entregado' ? <><img src={checkIcon} className="icono-img icono-check" alt="entregado" /> Entregado</> : o.estado === 'cancelado' ? <><img src={cancelIcon} className="icono-img icono-cancel" alt="cancelado" /> Cancelado</> : <><img src={processIcon} className="icono-img icono-process" alt="proceso" /> En Proceso</>}
+                                                        </span>
+                                                    </td>
+                                                    <td>{o.fecha_entrega ? new Date(o.fecha_entrega).toLocaleDateString() : '—'}</td>
+                                                    <td>
+                                                        <button className="btn-secondary sm" onClick={() => { setViewingOrder(o as unknown as Order); setViewingDocType('orden'); }}><img src={viewIcon} className="icono-img icono-view" alt="ver" /> Ver</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Modal para crear orden desde cotización */}
+                {orderFromCotizacion && (
+                    <div className="modal-overlay">
+                        <div className="modal-card">
+                            <h3><img src={ordenIcon} className="icono-img icono-orden" alt="orden" /> Crear Orden desde Cotización</h3>
+                            <p className="modal-subtitle">Cotización: {orderFromCotizacion.nombre_trabajo}</p>
+                            
+                            <label className="form-label">Fecha de Entrega (opcional)</label>
+                            <input 
+                                type="date" 
+                                className="styled-input"
+                                value={newOrderFechaEntrega}
+                                onChange={(e) => setNewOrderFechaEntrega(e.target.value)}
+                            />
+
+                            <div className="modal-actions">
+                                <button className="btn-secondary" onClick={() => { setOrderFromCotizacion(null); setNewOrderFechaEntrega(''); }}>Cancelar</button>
+                                <button className="btn-main" onClick={handleCreateOrderFromCotizacion}>Crear Orden</button>
                             </div>
                         </div>
                     </div>
@@ -284,13 +426,13 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                         <div className="modal-card">
                             <form onSubmit={handleSaveClient}>
                                 <h3>{editingClient.id ? 'Editar' : 'Nuevo'} Cliente</h3>
-                                <label style={{fontSize:'0.8rem', color:'#888'}}>Nombre del Cliente</label>
+                                <label className="form-label">Nombre del Cliente</label>
                                 <input className="styled-input" required placeholder="Nombre" value={editingClient.nombre || ''} onChange={e=>setEditingClient({...editingClient, nombre:e.target.value})} />
                                 
-                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:10, display:'block'}}>Nro Referencia / Teléfono</label>
+                                <label className="form-label">Nro Referencia / Teléfono</label>
                                 <input className="styled-input" placeholder="Referencia" value={editingClient.numero_referencia || ''} onChange={e=>setEditingClient({...editingClient, numero_referencia:e.target.value})} />
                                 
-                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:10, display:'block'}}>Domicilio</label>
+                                <label className="form-label">Domicilio</label>
                                 <input className="styled-input" placeholder="Domicilio" value={editingClient.domicilio || ''} onChange={e=>setEditingClient({...editingClient, domicilio:e.target.value})} />
                                 
                                 <div className="modal-actions">
@@ -302,51 +444,51 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                     </div>
                 )}
 
-                <div className="data-table">
-                    <thead><div><th>Nombre</th><th>Ref</th><th>Acciones</th></div></thead>
-                    <tbody>
+                <table className="data-table">
+                    <thead className="thead-clientes"><tr><th>Nombre</th><th>Ref</th><th>Acciones</th></tr></thead>
+                    <tbody className="tbody-clientes">
                         {clients.map(c => (
-                            <div key={c.id}>
-                                <span style={{cursor: 'pointer', color: '#34d399', fontWeight: 'bold'}} onClick={() => handleShowOrders(c)}>{c.nombre} ↗</span>
-                                <span>{c.numero_referencia}</span>
-                                <span>
-                                    <button className="icon-btn" onClick={() => setEditingClient(c)}>✏️</button>
-                                    {isAdmin && <button className="icon-btn danger" onClick={() => requestDeleteClient(c.id)}>🗑️</button>}
-                                </span>
-                            </div>
+                            <tr key={c.id}>
+                                <td>
+                                    <span onClick={() => handleShowClientOptions(c)}>{c.nombre} </span>
+                                </td>
+                                <td>{c.numero_referencia}</td>
+                                <td>
+                                    <button className="icon-btn" onClick={() => setEditingClient(c)}><img src={editIcon} className="icono-img icono-edit icono-no-margin" alt="editar" /></button>
+                                    {isAdmin && <button className="icon-btn danger" onClick={() => requestDeleteClient(c.id)}><img src={deleteIcon} className="icono-img icono-delete icono-no-margin" alt="eliminar" /></button>}
+                                </td>
+                            </tr>
                         ))}
                     </tbody>
-                </div>
+                </table>
             </div>
         )}
 
         {/* TAB HISTORIAL */}
         {activeTab === 'historial' && isAdmin && (
-            <div className="card" style={{overflowX: 'auto'}}>
+            <div className="card">
                 <h3>Historial de Configuraciones</h3>
-                <div className="table-responsive" style={{overflowX: 'auto'}}>
-                    <div className="data-table" style={{minWidth: '1200px', fontSize: '0.85rem'}}>
-                        <thead>
-                            <div>
-                                <th style={{width: 140}}>Fecha</th>
-                                <th>1.000 pts</th><th>Fac c/hilo</th><th>H. Bordar</th><th>H. Bobina</th><th>Pellón Rollo</th><th>T. Estruct</th><th>T. Normal</th><th>Papel Rollo</th><th>Imp.</th><th>Corte</th><th>Estado</th>
-                            </div>
-                        </thead>
-                        <tbody>
-                            {priceHistory.map(h => (
-                                <div key={h.id}>
-                                    <span>{h.fecha_modificacion ? new Date(h.fecha_modificacion).toLocaleString() : 'N/A'}</span>
-                                    <span>{h.precio_stitch_1000}</span><span>{h.factor_cambio_hilo}</span><span>{h.costo_hilo_bordar}</span><span>{h.costo_hilo_bobina}</span><span>{h.costo_pellon}</span><span>{h.tela_estructurante}</span><span>{h.tela_normal}</span><span>{h.rollo_papel}</span><span>{h.costo_impresion}</span><span>{h.corte_impresion}</span>
-                                    <span>{h.activo ? <span className="badge admin" style={{background:'#10b981'}}>Activo</span> : <span className="badge user" style={{background:'#9ca3af'}}>Inactivo</span>}</span>
-                                </div>
-                            ))}
-                        </tbody>
-                    </div>
-                </div>
+                <table className="data-table data-table-configuraciones">
+                    <thead className="thead-historial">
+                        <tr>
+                            <th>Fecha</th>
+                            <th>1.000 pts</th><th>Fac c/hilo</th><th>H. Bordar</th><th>H. Bobina</th><th>Pellón Rollo</th><th>T. Estruct</th><th>T. Normal</th><th>Papel Rollo</th><th>Imp.</th><th>Corte</th><th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody className="tbody-historial">
+                        {priceHistory.map(h => (
+                            <tr key={h.id}>
+                                <td>{h.fecha_modificacion ? new Date(h.fecha_modificacion).toLocaleString() : 'N/A'}</td>
+                                <td>{h.precio_stitch_1000}</td><td>{h.factor_cambio_hilo}</td><td>{h.costo_hilo_bordar}</td><td>{h.costo_hilo_bobina}</td><td>{h.costo_pellon}</td><td>{h.tela_estructurante}</td><td>{h.tela_normal}</td><td>{h.rollo_papel}</td><td>{h.costo_impresion}</td><td>{h.corte_impresion}</td>
+                                <td>{h.activo ? <span className="badge admin" >Activo</span> : <span className="badge user" >Inactivo</span>}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         )}
 
-        {/* TAB USUARIOS - CORREGIDO */}
+        {/* TAB USUARIOS */}
         {activeTab === 'usuarios' && isAdmin && (
             <div className="card">
                 <div className="card-header">
@@ -360,23 +502,22 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                             <form onSubmit={handleSaveUser}>
                                 <h3>{editingUser.id ? 'Editar' : 'Crear'} Usuario</h3>
                                 
-                                <label style={{fontSize:'0.8rem', color:'#888'}}>Nombre Completo</label>
+                                <label className="form-label">Nombre Completo</label>
                                 <input className="styled-input" required placeholder="Ej: Juan Perez" value={editingUser.nombre || ''} onChange={e=>setEditingUser({...editingUser, nombre:e.target.value})}/>
                                 
-                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Usuario (Login)</label>
+                                <label className="form-label">Usuario (Login)</label>
                                 <input className="styled-input" required placeholder="usuario" value={editingUser.usuario || ''} onChange={e=>setEditingUser({...editingUser, usuario:e.target.value})}/>
                                 
-                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Contraseña {editingUser.id && '(Dejar en blanco para no cambiar)'}</label>
+                                <label className="form-label">Contraseña {editingUser.id && '(Dejar en blanco para no cambiar)'}</label>
                                 <input className="styled-input" type="password" placeholder="***" value={editingUser.password || ''} onChange={e=>setEditingUser({...editingUser, password:e.target.value})}/>
                                 
-                                {/* NUEVOS CAMPOS AÑADIDOS */}
-                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Celular</label>
+                                <label className="form-label">Celular</label>
                                 <input className="styled-input" placeholder="777..." type="tel" value={editingUser.celular || ''} onChange={e=>setEditingUser({...editingUser, celular:e.target.value})}/>
 
-                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Domicilio</label>
+                                <label className="form-label">Domicilio</label>
                                 <input className="styled-input" placeholder="Dirección..." value={editingUser.domicilio || ''} onChange={e=>setEditingUser({...editingUser, domicilio:e.target.value})}/>
                                 
-                                <label style={{fontSize:'0.8rem', color:'#888', marginTop:8, display:'block'}}>Rol</label>
+                                <label className="form-label">Rol</label>
                                 <select className="styled-input" value={editingUser.role || 'empleado'} onChange={e=>setEditingUser({...editingUser, role:e.target.value as any})}>
                                     <option value="empleado">Empleado</option>
                                     <option value="administrador">Administrador</option>
@@ -391,33 +532,33 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                     </div>
                 )}
                 
-                <div className="data-table">
-                    <thead>
-                        <div>
+                <table className="data-table data-table-configuraciones">
+                    <thead className="thead-personal">
+                        <tr>
                             <th>Usuario</th>
                             <th>Nombre</th>
                             <th>Celular</th>
                             <th>Domicilio</th>
                             <th>Rol</th>
                             <th>Acciones</th>
-                        </div>
+                        </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="tbody-personal">
                         {users.map(u=>(
-                            <div key={u.id}>
-                                <span style={{fontWeight:'bold'}}>{u.usuario}</span>
-                                <span>{u.nombre}</span>
-                                <span>{u.celular || '-'}</span>
-                                <span style={{fontSize:'0.85rem'}}>{u.domicilio || '-'}</span>
-                                <span>{u.role === 'administrador' ? '👑 Admin' : 'Empleado'}</span>
-                                <span>
-                                    <button className="icon-btn" onClick={()=>setEditingUser(u)} title="Editar">✏️</button>
-                                    <button className="icon-btn danger" onClick={()=>requestDeleteUser(u.id)} title="Eliminar">🗑️</button>
-                                </span>
-                            </div>
+                            <tr key={u.id}>
+                                <td >{u.usuario}</td>
+                                <td>{u.nombre}</td>
+                                <td>{u.celular || '-'}</td>
+                                <td >{u.domicilio || '-'}</td>
+                                <td>{u.role === 'administrador' ? <><img src={adminIcon} className="icono-img icono-admin" alt="admin" /> Admin</> : 'Empleado'}</td>
+                                <td>
+                                    <button className="icon-btn" onClick={()=>setEditingUser(u)} title="Editar"><img src={editIcon} className="icono-img icono-edit icono-no-margin" alt="editar" /></button>
+                                    <button className="icon-btn danger" onClick={()=>requestDeleteUser(u.id)} title="Eliminar"><img src={deleteIcon} className="icono-img icono-delete icono-no-margin" alt="eliminar" /></button>
+                                </td>
+                            </tr>
                         ))}
                     </tbody>
-                </div>
+                </table>
             </div>
         )}
       </div>

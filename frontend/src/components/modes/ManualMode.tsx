@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ProcessResult, Config } from '../../types';
 import { api } from "../../services/api";
+import { AlertModal } from '../ui/AlertModal';
 
 interface Props {
   onEstimate: (result: ProcessResult, quantity: number) => void;
@@ -21,6 +22,17 @@ export const ManualMode = ({ onEstimate }: Props) => {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState('next');
   const [appConfig, setAppConfig] = useState<Config | null>(null);
+  const [alertModal, setAlertModal] = useState<{isOpen: boolean; title: string; message: string; type: 'error' | 'success' | 'info'; onCloseAction?: () => void}>({isOpen: false, title: '', message: '', type: 'info'});
+
+  const showAlert = (title: string, message: string, type: 'error' | 'success' | 'info' = 'info', onCloseAction?: () => void) => {
+    setAlertModal({isOpen: true, title, message, type, onCloseAction});
+  };
+
+  const closeAlert = () => {
+    const action = alertModal.onCloseAction;
+    setAlertModal({isOpen: false, title: '', message: '', type: 'info'});
+    if (action) action();
+  };
 
   const [data, setData] = useState<QuizData>({
     hasApplication: '',
@@ -90,7 +102,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
     },
     { id: 4, type: 'dimensions', title: 'Dimensiones', subtitle: 'cm', inputs: ['width', 'height'] },
     { id: 5, type: 'number', title: 'Colores', subtitle: 'Cambios de hilo', key: 'colors', label: 'Nº Colores', min: 0 },
-    { id: 6, type: 'number', title: 'Puntadas', subtitle: 'Opcional', key: 'stitches', label: 'Cantidad Puntadas', min: 0 },
+    { id: 6, type: 'number', title: 'Puntadas', subtitle: '', key: 'stitches', label: 'Cantidad Puntadas', min: 1 },
     { id: 7, type: 'number', title: 'Producción', subtitle: 'Piezas', key: 'quantity', label: 'Unidades', min: 0 }
   ];
 
@@ -110,7 +122,30 @@ export const ManualMode = ({ onEstimate }: Props) => {
     setData(prev => ({ ...prev, [key]: isNaN(numValue) ? 0 : numValue }));
   };
 
-  const nextStep = () => step < questions.length - 1 ? (setDirection('next'), setTimeout(() => setStep(s => s + 1), 50)) : finishQuiz();
+  const isCurrentStepValid = (): boolean => {
+    const q = currentQuestion;
+    
+    if (q.type === 'dimensions') {
+      return data.width > 0 && data.height > 0;
+    }
+    
+    if (q.type === 'number' && q.key) {
+      const value = data[q.key as keyof QuizData];
+      // Colores mínimo 1, puntadas mínimo 1, cantidad mínimo 1
+      return typeof value === 'number' && value >= 1;
+    }
+    
+    return true;
+  };
+
+  const nextStep = () => {
+    if (!isCurrentStepValid()) {
+      showAlert('Campo Obligatorio', 'Por favor complete el valor requerido antes de continuar.', 'error');
+      return;
+    }
+    step < questions.length - 1 ? (setDirection('next'), setTimeout(() => setStep(s => s + 1), 50)) : finishQuiz();
+  };
+  
   const prevStep = () => {
     setDirection('prev');
     if (step === 4 && data.hasApplication === 'No') setStep(0);
@@ -119,8 +154,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
 
   const finishQuiz = () => {
     if (data.width <= 0 || data.height <= 0) {
-      alert("⚠️ Medidas inválidas");
-      setStep(3);
+      showAlert('Medidas Inválidas', 'Las dimensiones deben ser mayores a 0.', 'error', () => setStep(3));
       return;
     }
   const redondeoPrecio = (precio: number) => {
@@ -135,7 +169,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
     const PRECIO_1000_PUNTADAS = precios?.precio_stitch_1000 ?? 0;
     let PRECIO_CAMBIO_COLOR = precios?.factor_cambio_hilo ?? 0;
     const PRECIO_IMPRESION = precios?.costo_impresion ?? 0;
-    const COSTO_ROLLO = precios?.costo_rollo ?? 0;
+    const COSTO_ROLLO = precios?.rollo_papel ?? 0;
     const PRECIO_CORTE_POR_60_SEG = precios?.corte_impresion ?? 0;
     
     // Pellón
@@ -226,8 +260,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
 
       // Validación: El diseño debe caber en el ancho del rollo
       if (imgW > ROLLO_ANCHO_CM) {
-        alert(`⚠️ El ancho del diseño (${imgW} cm) excede el ancho del rollo (${ROLLO_ANCHO_CM} cm)`);
-        setStep(3);
+        showAlert('Diseño Excede Rollo', `El ancho del diseño (${imgW} cm) excede el ancho del rollo (${ROLLO_ANCHO_CM} cm).`, 'error', () => setStep(3));
         return;
       }
 
@@ -336,6 +369,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
 
   return (
     <div className="quiz-mode">
+      <AlertModal isOpen={alertModal.isOpen} title={alertModal.title} message={alertModal.message} type={alertModal.type} onClose={closeAlert} />
       <div className="progress-container"><div className="progress-bar" style={{ width: `${progress}%` }}></div></div>
       <div className="step-counter">Paso {step + 1} de {questions.length}</div>
       <div className={`quiz-card ${direction}`} key={step}>
@@ -346,7 +380,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
             <div className="options-grid">
               {currentQuestion.options.map((opt, idx) => (
                 <button key={idx} className={`option-card ${data[currentQuestion.key as keyof QuizData] === opt.value ? 'selected' : ''}`} onClick={() => handleOptionClick(currentQuestion.key!, opt.value)}>
-                  <div className="icon-circle"><i className={opt.icon}></i></div><span>{opt.label}</span>
+                  <div className="icon-circle"><span>{opt.label}</span></div>
                 </button>
               ))}
             </div>

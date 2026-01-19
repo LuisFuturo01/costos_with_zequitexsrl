@@ -1,0 +1,142 @@
+================================================================================
+DOCUMENTACIÓN DE ICONOS SVG - ZEQUITEX COTIZADOR
+================================================================================
+Generado: 2026-01-18
+Directorio: src/assets/images/
+
+================================================================================
+ARCHIVOS SVG CREADOS (16 iconos)
+================================================================================
+
+| Archivo         | Descripción                    | Color Principal |
+|-----------------|--------------------------------|-----------------|
+| check.svg       | Checkmark para entregado       | #10b981 (verde) |
+| cancel.svg      | X para cancelado               | #ef4444 (rojo)  |
+| cotizacion.svg  | Documento para cotizaciones    | #6366f1 (índigo)|
+| orden.svg       | Caja para órdenes/paquetes     | #f59e0b (ámbar) |
+| view.svg        | Ojo para ver detalles          | #3b82f6 (azul)  |
+| edit.svg        | Lápiz para editar              | #8b5cf6 (violeta)|
+| delete.svg      | Papelera para eliminar         | #ef4444 (rojo)  |
+| admin.svg       | Corona/estrella para admin     | #eab308 (dorado)|
+| process.svg     | Flechas circulares en proceso  | #3b82f6 (azul)  |
+| close.svg       | X para cerrar modales          | currentColor    |
+| user.svg        | Persona para cliente           | #64748b (gris)  |
+| money.svg       | Símbolo de dinero              | #10b981 (verde) |
+| calendar.svg    | Calendario para fechas         | #6366f1 (índigo)|
+| save.svg        | Disco para guardar             | #10b981 (verde) |
+| list.svg        | Clipboard para listas          | #64748b (gris)  |
+| warning.svg     | Triángulo de advertencia       | #f59e0b (ámbar) |
+
+================================================================================
+CLASES CSS IMPLEMENTADAS
+================================================================================
+
+Clase Genérica:
+- .icono-img          → Estilos base (1em x 1em, vertical-align middle)
+
+Clases de Tamaño:
+- .icono-sm          → 0.875em
+- .icono-md          → 1.25em
+- .icono-lg          → 1.5em
+- .icono-xl          → 2em
+- .icono-xxl         → 3em
+
+Clase Auxiliar:
+- .icono-no-margin   → Sin margin-right (para iconos solos en botones)
+
+Clases Específicas por Icono:
+- .icono-check       → check.svg
+- .icono-cancel      → cancel.svg
+- .icono-cotizacion  → cotizacion.svg
+- .icono-orden       → orden.svg
+- .icono-view        → view.svg
+- .icono-edit        → edit.svg
+- .icono-delete      → delete.svg
+- .icono-admin       → admin.svg
+- .icono-process     → process.svg
+- .icono-close       → close.svg
+- .icono-user        → user.svg
+- .icono-money       → money.svg
+- .icono-calendar    → calendar.svg
+- .icono-save        → save.svg
+- .icono-list        → list.svg
+- .icono-warning     → warning.svg
+
+================================================================================
+UBICACIÓN DE USO POR COMPONENTE
+================================================================================
+
+ConfigView.tsx (10 iconos)
+--------------------------
+- cotizacionIcon  → Botón "Ver Cotizaciones", título modal cotizaciones
+- ordenIcon       → Botón "Ver Órdenes", título modal órdenes, crear orden
+- closeIcon       → Botones de cerrar modales (X)
+- viewIcon        → Botones "Ver" en tablas
+- editIcon        → Botones de editar clientes y usuarios
+- deleteIcon      → Botones de eliminar clientes y usuarios
+- adminIcon       → Indicador de rol administrador
+- checkIcon       → Estado "Entregado" en badge
+- cancelIcon      → Estado "Cancelado" en badge
+- processIcon     → Estado "En Proceso" en badge
+
+OrdenesView.tsx (12 iconos)
+---------------------------
+- listIcon        → Título "Órdenes de Trabajo"
+- closeIcon       → Botón cerrar vista
+- processIcon     → Filtro y badge "En Proceso"
+- checkIcon       → Filtro y badge "Entregado"
+- cancelIcon      → Filtro y badge "Cancelado"
+- userIcon        → Label "Cliente"
+- ordenIcon       → Label "Cantidad"
+- moneyIcon       → Label "Total"
+- calendarIcon    → Label "Entrega"
+- cotizacionIcon  → Label "Notas"
+- viewIcon        → Botón "Ver"
+- editIcon        → Botón "Editar"
+
+WorkClientView.tsx (3 iconos)
+-----------------------------
+- closeIcon       → Botón cerrar modal (esquina)
+- editIcon        → Botón "Editar"
+- saveIcon        → Botón "Guardar como Nueva"
+
+App.tsx (2 iconos)
+------------------
+- saveIcon        → Botón "Guardar Cotización"
+- checkIcon       → Botón y modal "Confirmar Orden"
+
+ExitConfirmModal.tsx (1 icono)
+------------------------------
+- warningIcon     → Icono grande de advertencia
+
+================================================================================
+EJEMPLO DE USO EN CÓDIGO TSX
+================================================================================
+
+1. Importar el icono:
+   import viewIcon from '../../assets/images/view.svg';
+
+2. Usar en JSX:
+   <img src={viewIcon} className="icono-img icono-view" alt="ver" />
+
+3. Para botones (sin margen extra):
+   <button className="icon-btn">
+     <img src={editIcon} className="icono-img icono-edit icono-no-margin" alt="editar" />
+   </button>
+
+4. Con tamaño personalizado:
+   <img src={warningIcon} className="icono-img icono-warning icono-xxl" alt="advertencia" />
+
+5. Para fondos oscuros (invertir color):
+   <img src={closeIcon} style={{filter: 'brightness(0) invert(1)'}} />
+
+================================================================================
+ARCHIVOS SCSS MODIFICADOS
+================================================================================
+
+_variables.scss
+---------------
+Se agregaron las clases CSS para .icono-img y modificadores de tamaño
+al final del archivo (después de las variables CSS).
+
+================================================================================

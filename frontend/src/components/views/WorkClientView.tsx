@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react';
-import type { Order, Config } from '../types';
+import type { Order, Config } from '../../types';
+// Iconos SVG
+import closeIcon from '../../assets/images/close.svg';
+import editIcon from '../../assets/images/edit.svg';
+import saveIcon from '../../assets/images/save.svg';
 
 interface Props {
   order: Order;
@@ -7,6 +11,7 @@ interface Props {
   onClose: () => void;
   config: Config;
   onSaveNewOrder: (newOrderData: any) => void;
+  docType?: 'cotizacion' | 'orden';
 }
 
 // BASTIDORES CON PRECIO DE CORTE (IGUAL QUE MANUAL MODE)
@@ -18,7 +23,7 @@ const BASTIDORES_LISTA = [
   { size: 31, name: "31 cm", corte: 0.65 }
 ];
 
-export const WorkClientView = ({ order, clientName, onClose, config, onSaveNewOrder }: Props) => {
+export const WorkClientView = ({ order, clientName, onClose, config, onSaveNewOrder, docType = 'cotizacion' }: Props) => {
   
   // --- LEER DATOS ORIGINALES PARA ESTADO INICIAL ---
   const initialData = useMemo(() => {
@@ -250,11 +255,11 @@ export const WorkClientView = ({ order, clientName, onClose, config, onSaveNewOr
         className="ticket-card ticket-scrollable" 
         style={{maxWidth: '450px', width: '100%', position: 'relative', maxHeight: '85vh', overflowY: 'auto', display: 'flex', flexDirection: 'column'}}
       >
-        <button className="close-btn-top" onClick={onClose} style={{position: 'absolute', top: '15px', right: '15px', zIndex: 10, background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px'}}>✕</button>
+        <button className="close-btn-top" onClick={onClose} style={{position: 'absolute', top: '15px', right: '15px', zIndex: 10, background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px'}}><img src={closeIcon} className="icono-img icono-close icono-no-margin" alt="cerrar" style={{width: '14px', height: '14px', filter: 'brightness(0) invert(1)'}} /></button>
 
         {/* HEADER */}
         <div className="ticket-header" style={{marginTop: '10px'}}>
-          <div className="ticket-brand">ZEQUITEX</div>
+          <div className="ticket-brand">{docType === 'orden' ? 'ORDEN DE TRABAJO' : 'ZEQUITEX'}</div>
           
           {isEditing ? (
               <input 
@@ -390,13 +395,13 @@ export const WorkClientView = ({ order, clientName, onClose, config, onSaveNewOr
           {!isEditing ? (
               <>
                 <button className="action-btn" style={{background: '#475569'}} onClick={onClose}>Cerrar</button>
-                <button className="action-btn" style={{background: '#f59e0b'}} onClick={() => setIsEditing(true)}>✏️ Editar</button>
+                <button className="action-btn" style={{background: '#f59e0b'}} onClick={() => setIsEditing(true)}><img src={editIcon} className="icono-img icono-edit" alt="editar" style={{filter: 'brightness(0) invert(1)'}} /> Editar</button>
                 <button className="action-btn print" onClick={handlePrint}><i className="fas fa-print"></i> Imprimir</button>
               </>
           ) : (
               <>
                 <button className="action-btn" style={{background: '#475569'}} onClick={() => setIsEditing(false)}>Cancelar</button>
-                <button className="action-btn" style={{background: '#10b981'}} onClick={handleSaveAsNew}>💾 Guardar como Nueva</button>
+                <button className="action-btn" style={{background: '#10b981'}} onClick={handleSaveAsNew}><img src={saveIcon} className="icono-img icono-save" alt="guardar" style={{filter: 'brightness(0) invert(1)'}} /> Guardar como Nueva</button>
               </>
           )}
         </div>

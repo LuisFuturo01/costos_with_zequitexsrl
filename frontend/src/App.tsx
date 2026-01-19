@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import './assets/styles/App.scss';
 import type { Config, TabMode, View, ProcessResult, User, Client } from './types';
 import { api } from './services/api';
@@ -7,6 +7,7 @@ import { api } from './services/api';
 import { Header } from './components/layout/Header';
 import { LoginView } from './components/views/LoginView';
 import { ConfigView } from './components/views/ConfigView';
+import { OrdenesView } from './components/views/OrdenesView';
 import { ResultTicket } from './components/ResultTicket'; 
 import { UploadMode } from './components/modes/UploadMode';
 import { CameraMode } from './components/modes/CameraMode';
@@ -15,6 +16,11 @@ import { ManualMode } from './components/modes/ManualMode';
 // Modales UI
 import { InputModal } from './components/ui/InputModal';
 import { AlertModal } from './components/ui/AlertModal';
+import { ExitConfirmModal } from './components/ui/ExitConfirmModal';
+
+// Iconos SVG
+import saveIcon from './assets/images/save.svg';
+import checkIcon from './assets/images/check.svg';
 
 const BASTIDORES_DISPONIBLES = [
   { nombre: "9 cm", size: 6.5, corte: 0.15 },
@@ -46,10 +52,39 @@ function App() {
   const [alertInfo, setAlertInfo] = useState<{open: boolean, title: string, msg: string, type: 'error'|'success'|'info'}>({open: false, title:'', msg:'', type:'info'});
   
   // Control del flujo de pedir nombre
-  const [jobModal, setJobModal] = useState<{open: boolean, action: 'print'|'save'}>({open: false, action: 'save'});
+  const [jobModal, setJobModal] = useState<{open: boolean, action: 'print'|'save'|'confirm'}>({open: false, action: 'save'});
   const [currentJobName, setCurrentJobName] = useState("Bordado Personalizado");
 
+  // Estados para confirmar orden
+  const [lastSavedCotizacionId, setLastSavedCotizacionId] = useState<number | null>(null);
+  const [confirmOrderModal, setConfirmOrderModal] = useState(false);
+  const [ordenFechaEntrega, setOrdenFechaEntrega] = useState('');
+  const [ordenDetail, setOrdenDetail] = useState('');
+
+  // Estado para modal de salida
+  const [hasUnsavedData, setHasUnsavedData] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+
   useEffect(() => { loadData(); }, []);
+
+  // Manejar evento beforeunload para advertir sobre datos no guardados
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedData) {
+        e.preventDefault();
+        // Mostrar modal personalizado cuando hay datos sin guardar
+        setShowExitModal(true);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedData]);
+
+  // Marcar datos como no guardados cuando hay un resultado
+  useEffect(() => {
+    setHasUnsavedData(result !== null && lastSavedCotizacionId === null);
+  }, [result, lastSavedCotizacionId]);
 
   const loadData = async () => {
       try {
@@ -57,7 +92,7 @@ function App() {
           setConfig(cfg);
           const cls = await api.getClients();
           setClients(cls);
-      } catch (e) { console.error(e); }
+      } catch (err) { console.error(err); }
   };
 
   const redondeoPrecio = (precio: number) => {
@@ -92,7 +127,7 @@ function App() {
               setShowNewClientModal(false);
               setNewClientName("");
           }
-      } catch (e) { showAlert("Error", "Error creando cliente", "error"); }
+      } catch { showAlert("Error", "Error creando cliente", "error"); }
   };
 
   // --- FLUJO: SOLICITAR NOMBRE ---
@@ -168,15 +203,60 @@ function App() {
       };
 
       try {
-          await api.saveOrder(orderPayload);
-          showAlert("Éxito", "Cotización guardada correctamente.", "success");
-      } catch (e: any) {
-          showAlert("Error", "Error al guardar: " + e.message, "error");
+          const response = await api.saveOrder(orderPayload);
+          setLastSavedCotizacionId(response.id);
+          setHasUnsavedData(false);
+          showAlert("Éxito", "Cotización guardada. ¿Deseas confirmar la orden?", "success");
+      } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Error desconocido';
+          showAlert("Error", "Error al guardar: " + message, "error");
+      }
+  };
+
+  // --- FLUJO: CONFIRMAR ORDEN ---
+  const handleOpenConfirmOrder = () => {
+      if (!lastSavedCotizacionId) {
+          return showAlert("Atención", "Primero debes guardar la cotización.", "error");
+      }
+      setConfirmOrderModal(true);
+  };
+
+  const handleConfirmOrder = async () => {
+      if (!lastSavedCotizacionId) return;
+      
+      try {
+          await api.createOrden({
+              cotizacion_id: lastSavedCotizacionId,
+              fecha_entrega: ordenFechaEntrega || undefined,
+              detail: ordenDetail || undefined
+          });
+          setConfirmOrderModal(false);
+          setOrdenFechaEntrega('');
+          setOrdenDetail('');
+          setResult(null);
+          setLastSavedCotizacionId(null);
+          setHasUnsavedData(false);
+          showAlert("Éxito", "Orden confirmada correctamente. Puedes verla en la sección de Órdenes.", "success");
+      } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : 'Error desconocido';
+          showAlert("Error", message, "error");
+      }
+  };
+
+  // --- MANEJO DE SALIDA ---
+  const handleConfirmExit = () => {
+      setShowExitModal(false);
+      setHasUnsavedData(false);
+      setResult(null);
+      setLastSavedCotizacionId(null);
+      if (pendingNavigation) {
+          pendingNavigation();
+          setPendingNavigation(null);
       }
   };
 
   // 2. Ejecutar Impresión
-  const executePrint = (name: string) => {
+  const executePrint = () => {
       setIsPrinting(true); 
       setTimeout(() => {
           window.print(); 
@@ -272,7 +352,10 @@ function App() {
       } else { setResult(apiData); }
       setManualQuantity(1);
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    } catch (err: any) { showAlert("Error", err.message, "error"); } finally { setIsProcessing(false); }
+    } catch (err: unknown) { 
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      showAlert("Error", message, "error"); 
+    } finally { setIsProcessing(false); }
   };
 
   const onManualEstimate = (res: ProcessResult, qty: number) => {
@@ -288,7 +371,7 @@ function App() {
             result={result} 
             config={config} 
             initialQuantity={manualQuantity} 
-            clientName={getSelectedClientName()} 
+            selectedClient={getSelectedClient()}
             jobName={currentJobName}
             onPrintRequest={() => {}} 
         />
@@ -298,6 +381,14 @@ function App() {
   // --- VISTAS NORMALES ---
   if (view === 'login') return <LoginView setView={setView} onLoginSuccess={(u)=>{setCurrentUser(u); setIsLoggedIn(true); setView('config');}} />;
   if (view === 'config' && isLoggedIn && config) return <ConfigView config={config} setConfig={setConfig} setView={setView} setIsLoggedIn={setIsLoggedIn} currentUser={currentUser} />;
+  if (view === 'ordenes') return (
+    <div className="app">
+      <Header setView={setView} />
+      <div className="container">
+        <OrdenesView onClose={() => setView('main')} />
+      </div>
+    </div>
+  );
 
   return (
     <div className="app">
@@ -383,18 +474,65 @@ function App() {
                 onPrintRequest={() => handleRequestAction('print')}
               />
               
-              <div style={{marginTop: '1rem', textAlign: 'center', marginBottom: '2rem'}}>
+              <div className="action-buttons-container">
                   <button 
-                    className="btn-main" 
-                    style={{backgroundColor: selectedClientId ? '#10b981' : '#9ca3af', width:'100%', maxWidth:400}} 
+                    className={`btn-main btn-save-cotizacion ${selectedClientId ? 'has-client' : 'no-client'}`}
                     onClick={() => handleRequestAction('save')}
                     disabled={!selectedClientId}
                   >
-                      {selectedClientId ? '💾 Guardar Cotización' : 'Selecciona un cliente para guardar'}
+                      {selectedClientId ? <><img src={saveIcon} className="icono-img icono-save" alt="guardar" /> Guardar Cotización</> : 'Selecciona un cliente para guardar'}
                   </button>
+                  
+                  {lastSavedCotizacionId && (
+                    <button 
+                      className="btn-main btn-confirm-order"
+                      onClick={handleOpenConfirmOrder}
+                    >
+                        <img src={checkIcon} className="icono-img icono-check" alt="confirmar" /> Confirmar Orden
+                    </button>
+                  )}
               </div>
           </div>
         )}
+
+        {/* Modal de Confirmar Orden */}
+        {confirmOrderModal && (
+          <div className="modal-overlay confirm-order-modal">
+            <div className="modal-card">
+              <h3><img src={checkIcon} className="icono-img icono-check" alt="confirmar" /> Confirmar Orden</h3>
+              <p>Esta cotización pasará a producción. Puedes agregar detalles opcionales:</p>
+              
+              <label>Fecha de Entrega (opcional)</label>
+              <input 
+                type="date" 
+                className="styled-input"
+                value={ordenFechaEntrega}
+                onChange={(e) => setOrdenFechaEntrega(e.target.value)}
+              />
+
+              <label className="mt-10">Observaciones (opcional)</label>
+              <textarea 
+                className="styled-input"
+                rows={3}
+                placeholder="Notas adicionales para producción..."
+                value={ordenDetail}
+                onChange={(e) => setOrdenDetail(e.target.value)}
+              />
+
+              <div className="modal-actions">
+                <button className="btn-secondary" onClick={() => setConfirmOrderModal(false)}>Cancelar</button>
+                <button className="btn-main" onClick={handleConfirmOrder}>Confirmar Orden</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Salida */}
+        <ExitConfirmModal
+          isOpen={showExitModal}
+          onConfirmExit={handleConfirmExit}
+          onCancel={() => setShowExitModal(false)}
+        />
       </div>
     </div>
   );

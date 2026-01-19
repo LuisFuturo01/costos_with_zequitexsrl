@@ -141,10 +141,10 @@ export const CameraMode = ({ onCapture }: Props) => {
           <img src={capturedImage} alt="Captura" style={{width: '100%', borderRadius: 'var(--radius-md)'}} />
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'center' }}>
             <button type="button" className="btn-secondary" onClick={handleRetake}>
-              📸 Tomar otra
+              <img src="./src/assets/images/camera.svg" alt="" style={{ width: '20px', height: '20px' }}/> Tomar otra
             </button>
-            <div style={{ padding: '0.8rem', color: 'var(--color-success)', fontWeight: 'bold' }}>
-              ✅ Foto lista
+            <div style={{ padding: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img src="./src/assets/images/check.svg" alt="" style={{ width: '20px', height: '20px', border:'none' }}/> <p>Foto lista</p>
             </div>
           </div>
         </div>

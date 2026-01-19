@@ -84,3 +84,25 @@
   --header-height: auto;
   --icon-button-size: 36px;
 }
+
+/* =========================================
+   2. ESTILOS DE ICONOS IMG
+   ========================================= */
+.icono-img {
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+  display: inline-block;
+  margin-right: 0.25em;
+  flex-shrink: 0;
+}
+
+/* Tamaños de iconos */
+.icono-sm { width: 0.875em; height: 0.875em; }
+.icono-md { width: 1.25em; height: 1.25em; }
+.icono-lg { width: 1.5em; height: 1.5em; }
+.icono-xl { width: 2em; height: 2em; }
+.icono-xxl { width: 3em; height: 3em; }
+
+/* Iconos sin margen derecho (para cuando están solos) */
+.icono-no-margin { margin-right: 0; }
