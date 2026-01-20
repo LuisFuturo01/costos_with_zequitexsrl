@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image
 from rembg import remove 
 
-from database import db, Personal, Clientes, ConfiguracionPrecios, Ordenes, init_db_data
+from database import db, Personal, Clientes, ConfiguracionPrecios, Cotizacion, Orden, init_db_data
 
 try:
     from image_services import obtener_colores_dominantes_avanzado, calcular_estimacion_puntadas
@@ -112,7 +112,7 @@ def update_config():
     return jsonify({"success": True})
 
 # ==========================================
-# 📦 GESTIÓN DE ÓRDENES
+# 📦 GESTIÓN DE COTIZACIONES (antes Órdenes)
 # ==========================================
 
 @app.route('/orders', methods=['POST'])
@@ -122,7 +122,7 @@ def create_order():
         if not data.get('cliente_id') or not data.get('configuracion_id'):
             return jsonify({"success": False, "message": "Faltan IDs de cliente o configuración"}), 400
 
-        new_order = Ordenes(
+        new_cotizacion = Cotizacion(
             cliente_id=data.get('cliente_id'),
             configuracion_id=data.get('configuracion_id'),
             nombre_trabajo=data.get('nombre_trabajo', 'Cotización'),
@@ -139,18 +139,120 @@ def create_order():
             datos_json=data.get('datos_json'),
             detalles=f"{data.get('nombre_trabajo')} - Total: {data.get('precio_total')}"
         )
-        db.session.add(new_order)
+        db.session.add(new_cotizacion)
         db.session.commit()
-        return jsonify({"success": True, "id": new_order.id})
+        return jsonify({"success": True, "id": new_cotizacion.id})
     except Exception as e:
-        print("Error saving order:", e)
+        print("Error saving cotizacion:", e)
         db.session.rollback()
         return jsonify({"success": False, "message": f"Error SQL: {str(e)}"}), 500
 
 @app.route('/clients/<int:client_id>/orders', methods=['GET'])
 def get_client_orders(client_id):
-    orders = Ordenes.query.filter_by(cliente_id=client_id).order_by(Ordenes.fecha_pedido.desc()).all()
-    return jsonify([o.to_dict() for o in orders])
+    try:
+        cotizaciones = Cotizacion.query.filter_by(cliente_id=client_id).order_by(Cotizacion.fecha_pedido.desc()).all()
+        return jsonify([c.to_dict() for c in cotizaciones])
+    except Exception as e:
+        print(f"Error in get_client_orders: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ==========================================
+# 📋 GESTIÓN DE ÓRDENES (Nueva funcionalidad)
+# ==========================================
+
+@app.route('/ordenes', methods=['GET'])
+def get_ordenes():
+    """Listar todas las órdenes ordenadas por fecha de entrega"""
+    try:
+        ordenes = Orden.query.order_by(Orden.fecha_entrega.asc(), Orden.fecha_creacion.desc()).all()
+        return jsonify([o.to_dict() for o in ordenes])
+    except Exception as e:
+        print(f"Error in get_ordenes: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/clients/<int:client_id>/ordenes', methods=['GET'])
+def get_client_ordenes(client_id):
+    """Listar órdenes de un cliente específico"""
+    ordenes = Orden.query.join(Cotizacion).filter(Cotizacion.cliente_id == client_id).order_by(Orden.fecha_creacion.desc()).all()
+    return jsonify([o.to_dict() for o in ordenes])
+
+@app.route('/ordenes', methods=['POST'])
+def create_orden():
+    """Crear una orden desde una cotización confirmada"""
+    data = request.get_json()
+    try:
+        cotizacion_id = data.get('cotizacion_id')
+        if not cotizacion_id:
+            return jsonify({"success": False, "message": "Falta cotizacion_id"}), 400
+        
+        # Verificar que la cotización existe
+        cotizacion = Cotizacion.query.get(cotizacion_id)
+        if not cotizacion:
+            return jsonify({"success": False, "message": "Cotización no encontrada"}), 404
+        
+        # Verificar si ya existe una orden para esta cotización
+        existing_orden = Orden.query.filter_by(cotizacion_id=cotizacion_id).first()
+        if existing_orden:
+            return jsonify({"success": False, "message": "Ya existe una orden para esta cotización"}), 400
+        
+        fecha_entrega = None
+        if data.get('fecha_entrega'):
+            from datetime import datetime as dt
+            fecha_entrega = dt.strptime(data.get('fecha_entrega'), '%Y-%m-%d').date()
+        
+        new_orden = Orden(
+            cotizacion_id=cotizacion_id,
+            estado=data.get('estado', 'en_proceso'),
+            fecha_entrega=fecha_entrega,
+            detail=data.get('detail', '')
+        )
+        db.session.add(new_orden)
+        db.session.commit()
+        return jsonify({"success": True, "id": new_orden.id})
+    except Exception as e:
+        print("Error creating orden:", e)
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
+
+@app.route('/ordenes/<int:id>', methods=['PUT'])
+def update_orden(id):
+    """Actualizar estado u otros campos de una orden"""
+    orden = Orden.query.get_or_404(id)
+    data = request.get_json()
+    
+    if 'estado' in data:
+        if data['estado'] not in ['en_proceso', 'cancelado', 'entregado']:
+            return jsonify({"success": False, "message": "Estado inválido"}), 400
+        orden.estado = data['estado']
+    
+    if 'detail' in data:
+        orden.detail = data['detail']
+    
+    if 'fecha_entrega' in data:
+        if data['fecha_entrega']:
+            from datetime import datetime as dt
+            orden.fecha_entrega = dt.strptime(data['fecha_entrega'], '%Y-%m-%d').date()
+        else:
+            orden.fecha_entrega = None
+    
+    try:
+        db.session.commit()
+        return jsonify({"success": True, "orden": orden.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/ordenes/<int:id>', methods=['DELETE'])
+def delete_orden(id):
+    """Eliminar una orden"""
+    orden = Orden.query.get_or_404(id)
+    try:
+        db.session.delete(orden)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
 
 # ==========================================
 # 🖼️ PROCESAMIENTO
