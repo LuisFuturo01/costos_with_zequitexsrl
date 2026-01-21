@@ -1,15 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-// import basicSsl from '@vitejs/plugin-basic-ssl' // Plugin removed to fix type error
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()], 
+  plugins: [react()],
   server: {
-    host: true,
+    host: '0.0.0.0',
     port: 5173,
-    hmr: {
-      clientPort: 5173
-    }
+    strictPort: true,
+    // Ponemos 'all' Y TAMBIÉN el dominio específico que te da el error
+    allowedHosts: [
+      'n6yo63nf6iod.share.zrok.io', 
+      '.zrok.io', 
+      'all'
+    ],
+    cors: true
   }
 })

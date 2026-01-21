@@ -6,7 +6,12 @@ import io
 import base64
 import numpy as np
 from PIL import Image
-from rembg import remove 
+from rembg import remove
+import os
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env
+load_dotenv()
 
 from database import db, Personal, Clientes, ConfiguracionPrecios, Cotizacion, Orden, init_db_data
 
@@ -16,10 +21,11 @@ except ImportError:
     print("⚠️ ADVERTENCIA: image_services.py no encontrado.")
 
 app = Flask(__name__)
-CORS(app)
+# Reemplaza CORS(app) por esto:
+CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers=["Content-Type", "skip_zrok_interstitial"])
 
-# Asegúrate de que esta URI sea correcta para tu entorno
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://LuisFuturo01:LuisFuturo01_2025@localhost/zequitexcotizador'
+# Cargar configuración desde variables de entorno
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'mysql+pymysql://root:@localhost/zequitexcotizador')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
@@ -27,6 +33,10 @@ db.init_app(app)
 # ==========================================
 # 🔐 AUTENTICACIÓN
 # ==========================================
+@app.route('/')
+def index():
+    return jsonify({"status": "online", "message": "Zequitex API funcionando"})
+
 @app.route('/config/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -462,4 +472,8 @@ if __name__ == '__main__':
             )
             db.session.add(admin)
             db.session.commit()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(
+        debug=os.getenv('FLASK_DEBUG', 'True').lower() == 'true',
+        host=os.getenv('FLASK_HOST', '0.0.0.0'),
+        port=int(os.getenv('FLASK_PORT', 5000))
+    )
