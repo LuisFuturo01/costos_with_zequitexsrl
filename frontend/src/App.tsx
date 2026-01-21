@@ -174,14 +174,6 @@ function App() {
       const subtotal = precioUnitarioAjustado * qty;
       const totalFinal = subtotal - (subtotal * discountPercent);
 
-      const fullDataSnapshot = {
-          breakdown: bd,
-          mensaje: result.mensaje,
-          imagen_procesada: result.imagen_procesada,
-          descuento_aplicado: discountPercent,
-          fecha_calculo: new Date().toISOString()
-      };
-
       // Detectar si lleva sublimación basado en el costo calculado
       const tieneSublimacion = (bd?.impresion || 0) > 0;
 
@@ -199,7 +191,7 @@ function App() {
           cantidad: qty,
           precio_unitario: precioUnitarioAjustado,
           precio_total: totalFinal,
-          datos_json: JSON.stringify(fullDataSnapshot)
+          datos_json: result.imagen_procesada ? result.imagen_procesada : null
       };
 
       try {
@@ -351,6 +343,7 @@ function App() {
         });
       } else { setResult(apiData); }
       setManualQuantity(1);
+      setLastSavedCotizacionId(null); // Reset - nueva cotización requiere guardar de nuevo
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     } catch (err: unknown) { 
       const message = err instanceof Error ? err.message : 'Error desconocido';
@@ -361,6 +354,7 @@ function App() {
   const onManualEstimate = (res: ProcessResult, qty: number) => {
       setResult(res);
       setManualQuantity(qty);
+      setLastSavedCotizacionId(null); // Reset - nueva cotización requiere guardar de nuevo
       setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
   };
 
@@ -373,13 +367,23 @@ function App() {
             initialQuantity={manualQuantity} 
             selectedClient={getSelectedClient()}
             jobName={currentJobName}
+            savedCotizacionId={lastSavedCotizacionId || undefined}
             onPrintRequest={() => {}} 
         />
       );
   }
 
   // --- VISTAS NORMALES ---
-  if (view === 'login') return <LoginView setView={setView} onLoginSuccess={(u)=>{setCurrentUser(u); setIsLoggedIn(true); setView('config');}} />;
+  // --- MANEJO LOGIN ---
+  const handleLoginSuccess = (u: User) => {
+      //console.log("Login Success:", u);
+      setCurrentUser(u);
+      setIsLoggedIn(true);
+      setView('config'); // Go directly to config logic
+  };
+
+  // --- VISTAS NORMALES ---
+  if (view === 'login') return <LoginView setView={setView} onLoginSuccess={handleLoginSuccess} />;
   if (view === 'config' && isLoggedIn && config) return <ConfigView config={config} setConfig={setConfig} setView={setView} setIsLoggedIn={setIsLoggedIn} currentUser={currentUser} />;
   if (view === 'ordenes') return (
     <div className="app">
@@ -471,6 +475,7 @@ function App() {
                 initialQuantity={manualQuantity} 
                 selectedClient={getSelectedClient()} 
                 jobName={currentJobName}
+                savedCotizacionId={lastSavedCotizacionId || undefined}
                 onPrintRequest={() => handleRequestAction('print')}
               />
               

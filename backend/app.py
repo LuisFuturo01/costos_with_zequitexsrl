@@ -396,7 +396,7 @@ def update_user(id):
 def delete_user(id):
     u = Personal.query.get_or_404(id)
     if u.usuario == 'admin': 
-        return jsonify({"success": False, "message": "No se puede borrar al admin"}), 400
+        return jsonify({"success": False, "message": "No se puede eliminar la cuenta principal de administrador"}), 400
     
     # BORRADO LÓGICO
     u.activo = False

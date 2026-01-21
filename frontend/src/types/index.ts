@@ -19,7 +19,11 @@ export interface ProcessResult {
     pellon?: number;
     corte?: number;
     impresion?: number;
-
+    // Campos extra usados en la app
+    bastidorNombre?: string;
+    cantidadUnidades?: number;
+    precioUnitarioReal?: number;
+    precioUnitarioAjustado?: number;
   };
   
   precio_sugerido: number; // Precio final total
@@ -70,6 +74,7 @@ export interface Pricing {
   fecha_modificacion?: string; 
   activo?: boolean;
   corte_impresion?: number;
+  costo_rollo?: number;
 }
 
 export interface LoginResponse {
@@ -120,6 +125,16 @@ export interface Orden {
   precio_total?: number;
   cantidad?: number;
   fecha_pedido?: string;
+  // Campos técnicos para visualización
+  puntadas?: number;
+  colores?: number;
+  ancho?: number;
+  alto?: number;
+  bastidor?: string;
+  tipo_tela?: string;
+  tiene_sublimacion?: boolean;
+  datos_json?: string;
+  precio_unitario?: number;
 }
 
 export type TabMode = 'upload' | 'camera' | 'manual';

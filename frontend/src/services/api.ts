@@ -66,7 +66,9 @@ export const api = {
 
   deleteUser: async (id: number) => {
     const res = await fetch(`${API_URL}/users/${id}`, { method: 'DELETE' });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Error al eliminar usuario');
+    return data;
   },
 
   // --- GESTIÓN DE CLIENTES ---
@@ -113,7 +115,7 @@ export const api = {
       tiene_sublimacion: boolean,
       [key: string]: unknown
   }) => {
-      console.log("Enviando cotización al backend:", orderData);
+      //console.log("Enviando cotización al backend:", orderData);
       const res = await fetch(`${API_URL}/orders`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

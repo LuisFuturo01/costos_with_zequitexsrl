@@ -201,8 +201,8 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
               await api.deleteClient(confirmModal.id);
               loadClients();
           }
-      } catch (e) {
-          setAlertInfo({open: true, msg: 'Error al eliminar registro'});
+      } catch (e: any) {
+          setAlertInfo({open: true, msg: e.message || 'Error al eliminar registro'});
       }
   };
 
@@ -214,7 +214,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
         </h1>
         <div className="user-info">
             <span>{currentUser?.usuario} ({currentUser?.role})</span>
-            <button className="btn-secondary sm" onClick={() => {setIsLoggedIn(false); setView('main')}}>Salir</button>
+            <button className="btn-secondary sm sm-salir" onClick={() => {setIsLoggedIn(false); setView('main')}}>Salir</button>
         </div>
       </header>
 

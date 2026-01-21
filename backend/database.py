@@ -23,7 +23,8 @@ class Personal(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     rol = db.Column(db.String(50), nullable=False)
     usuario = db.Column(db.String(50), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
+    # Mapeo explícito: atributo 'password_hash' -> columna 'password'
+    password_hash = db.Column('password', db.String(255), nullable=False)
     celular = db.Column(db.String(20))
     domicilio = db.Column(db.Text)
     
@@ -143,7 +144,18 @@ class Orden(db.Model):
             "cliente_nombre": cot.cliente.nombre if cot and cot.cliente else None,
             "precio_total": float(cot.precio_total) if cot and cot.precio_total else 0,
             "cantidad": cot.cantidad if cot else 0,
-            "fecha_pedido": cot.fecha_pedido.isoformat() if cot and cot.fecha_pedido else None
+            "fecha_pedido": cot.fecha_pedido.isoformat() if cot and cot.fecha_pedido else None,
+            # Detalles técnicos para visualización (WorkClientView)
+            "puntadas": cot.puntadas if cot else 0,
+            "colores": cot.colores if cot else 1,
+            "ancho": float(cot.ancho) if cot and cot.ancho is not None else 0.0,
+            "alto": float(cot.alto) if cot and cot.alto is not None else 0.0,
+            "bastidor": cot.bastidor if cot else '',
+            "tipo_tela": cot.tipo_tela if cot else '',
+            "tiene_sublimacion": cot.tiene_sublimacion if cot else False,
+            "datos_json": cot.datos_json if cot else None,
+             # Precio unitario también es útil
+            "precio_unitario": float(cot.precio_unitario) if cot and cot.precio_unitario is not None else 0.0
         }
 
 def init_db_data(app):

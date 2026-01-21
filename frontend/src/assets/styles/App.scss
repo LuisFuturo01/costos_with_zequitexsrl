@@ -611,7 +611,9 @@ select.styled-input:hover:not(:disabled):not(:focus) {
   box-shadow: var(--shadow-modal);
   animation: slideUp 0.3s ease;
 }
-
+.modal-lg{
+  min-width: 720px;
+}
 .modal-card h3 {
   font-size: var(--font-size-xl);
   color: var(--color-primary);
@@ -2584,6 +2586,7 @@ table.data-table {
       flex: 1;
       justify-content: center;
       align-items: center;
+      text-align: center;
       & > span{
        display: flex; 
        justify-content: center;
@@ -2598,11 +2601,23 @@ table.data-table {
       }
     }
   }
+  .tbody-historial tr *{
+    padding-right: 0;
+  }
   .thead-personal tr, .tbody-personal tr{
     min-width: 800px;
   }
   .thead-clientes tr, .tbody-clientes tr{
     min-width: 500px;
+    td span{
+      color: var(--color-primary);
+      font-weight: 700;
+      &:hover{
+        cursor: pointer;
+        text-decoration: underline;
+      }
+
+    }
   }
 }
 @media (max-width: 480px){
@@ -2902,4 +2917,24 @@ table.data-table {
   box-shadow: var(--shadow-modal);
   width: 100%;
   max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  .flex-column{
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    button{
+      height: 50px;
+    }
+  }
+}
+.btn-secondary.sm{
+    color: #000;
+  }
+button.sm-salir{
+  color: white !important;
+  &:hover{
+    color: #000 !important;
+  }
 }

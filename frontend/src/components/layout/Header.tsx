@@ -20,6 +20,7 @@ export const Header = ({ setView }: HeaderProps) => {
 
         {/* Bloque Derecho: Botón */}
         <button 
+          type="button"
           className="settings-btn" 
           onClick={() => setView('login')}
           title="Configuraciones"

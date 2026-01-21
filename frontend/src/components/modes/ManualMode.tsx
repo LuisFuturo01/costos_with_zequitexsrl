@@ -283,7 +283,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
       costoImpresion = redondeoPrecio(costoImpresion);
 
       // Log para debugging
-      console.log('📊 Cálculo de Sublimación:', {
+      /*console.log('📊 Cálculo de Sublimación:', {
         diseño: { ancho: imgW, alto: imgH, area: areaUnDesign },
         cantidad: data.quantity,
         distribucion: {
@@ -296,9 +296,9 @@ export const ManualMode = ({ onEstimate }: Props) => {
           calculado: ((areaUsadaRollo / AREA_TOTAL_ROLLO) * COSTO_ROLLO).toFixed(2),
           final: costoImpresion.toFixed(2)
         }
-      });
+      });*/
     } else {
-      console.log('❌ Sublimación NO marcada');
+      //console.log('❌ Sublimación NO marcada');
     }
 
     // 6. TOTAL CON AJUSTE DE CANTIDAD MÍNIMA
@@ -320,7 +320,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
     if (data.hasApplication === 'Si') mensaje += ' • Con Apliqué';
     if (data.hasSublimation === 'Si') mensaje += ' • Con Sublimación';
 
-    console.log("✅ Datos finales a enviar:", {
+    /*console.log("✅ Datos finales a enviar:", {
       cantidad: data.quantity,
       precioTotal: precioFinal.toFixed(2),
       precioUnitarioReal: precioUnitarioReal.toFixed(2),
@@ -332,7 +332,7 @@ export const ManualMode = ({ onEstimate }: Props) => {
       tieneAplicacion: data.hasApplication === 'Si',
       tieneSublimacion: data.hasSublimation === 'Si',
       seAplicoMinimo: data.quantity < CANTIDAD_MINIMA
-    });
+    });*/
 
     const manualResult: ProcessResult = {
       success: true,

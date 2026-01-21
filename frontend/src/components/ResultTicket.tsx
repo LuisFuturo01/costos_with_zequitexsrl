@@ -9,6 +9,7 @@ interface Props {
   onPrintRequest: () => void;
   selectedClient?: Client | null;
   jobName?: string;
+  savedCotizacionId?: number; // ID de cotización guardada para WhatsApp
 }
 
 export const ResultTicket = ({ 
@@ -17,7 +18,8 @@ export const ResultTicket = ({
   initialQuantity = 1, 
   onPrintRequest,
   selectedClient, 
-  jobName: initialJobName
+  jobName: initialJobName,
+  savedCotizacionId
 }: Props) => {
   
   const [qty, setQty] = useState(initialQuantity);
@@ -341,6 +343,7 @@ export const ResultTicket = ({
            quantity={qty}
            jobName={jName}
            client={activeClient}
+           cotizacionId={savedCotizacionId}
         />
 
         <button 

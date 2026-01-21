@@ -9,11 +9,6 @@ import closeIcon from '../../assets/images/close.svg';
 import processIcon from '../../assets/images/process.svg';
 import checkIcon from '../../assets/images/check.svg';
 import cancelIcon from '../../assets/images/cancel.svg';
-import userIcon from '../../assets/images/user.svg';
-import ordenIcon from '../../assets/images/orden.svg';
-import moneyIcon from '../../assets/images/money.svg';
-import calendarIcon from '../../assets/images/calendar.svg';
-import cotizacionIcon from '../../assets/images/cotizacion.svg';
 import viewIcon from '../../assets/images/view.svg';
 import editIcon from '../../assets/images/edit.svg';
 
@@ -22,19 +17,7 @@ interface Props {
   config?: Config;
 }
 
-const ESTADO_STYLES: Record<EstadoOrden, { bg: string; text: string; label: string; icon: string }> = {
-  en_proceso: { bg: '', text: '', label: 'En Proceso', icon: 'process' },
-  entregado: { bg: '', text: '', label: 'Entregado', icon: 'check' },
-  cancelado: { bg: '', text: '', label: 'Cancelado', icon: 'cancel' }
-};
-
-const getEstadoIcon = (estado: EstadoOrden) => {
-  switch(estado) {
-    case 'entregado': return checkIcon;
-    case 'cancelado': return cancelIcon;
-    default: return processIcon;
-  }
-};
+// (Styles removed as they are no longer used in Table View)
 
 export const OrdenesView = ({ onClose, config }: Props) => {
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
@@ -59,7 +42,16 @@ export const OrdenesView = ({ onClose, config }: Props) => {
     setLoading(true);
     try {
       const data = await api.getOrdenes();
-      setOrdenes(data);
+      if (Array.isArray(data)) {
+        setOrdenes(data);
+      } else {
+        console.error("API response is not an array:", data);
+        setOrdenes([]);
+        const errorResponse = data as any;
+        if (errorResponse.message) {
+            setAlertInfo({ open: true, msg: "Error: " + errorResponse.message, type: 'error' });
+        }
+      }
     } catch (e) {
       console.error('Error loading ordenes:', e);
     } finally {
@@ -165,72 +157,75 @@ export const OrdenesView = ({ onClose, config }: Props) => {
 
       {loading ? (
         <div className="loading-state">Cargando órdenes...</div>
-      ) : filteredOrdenes.length === 0 ? (
-        <div className="empty-state">
-          <p>No hay órdenes</p>
-        </div>
       ) : (
-        <div className="ordenes-grid">
-          {filteredOrdenes.map(orden => (
-            <div key={orden.id} className="orden-card">
-              <div className="orden-card-header">
-                <span className="orden-trabajo">{orden.nombre_trabajo || 'Sin nombre'}</span>
-                <span className={`estado-badge ${orden.estado}`}>
-                  <img src={getEstadoIcon(orden.estado)} className="icono-img" alt={orden.estado} /> {ESTADO_STYLES[orden.estado].label}
-                </span>
-              </div>
-
-              <div className="orden-card-body">
-                <div className="orden-info-row">
-                  <span className="label"><img src={userIcon} className="icono-img icono-user" alt="cliente" /> Cliente:</span>
-                  <span className="value">{orden.cliente_nombre || '—'}</span>
-                </div>
-
-                <div className="orden-info-row">
-                  <span className="label"><img src={ordenIcon} className="icono-img icono-orden" alt="cantidad" /> Cantidad:</span>
-                  <span className="value">{orden.cantidad || 0} pzs</span>
-                </div>
-
-                <div className="orden-info-row">
-                  <span className="label"><img src={moneyIcon} className="icono-img icono-money" alt="total" /> Total:</span>
-                  <span className="value">{formatMoney(orden.precio_total)}</span>
-                </div>
-
-                <div className="orden-info-row">
-                  <span className="label"><img src={calendarIcon} className="icono-img icono-calendar" alt="fecha" /> Entrega:</span>
-                  <span className="value">{formatDate(orden.fecha_entrega)}</span>
-                </div>
-
-                {orden.detail && (
-                  <div className="orden-detail">
-                    <span className="label"><img src={cotizacionIcon} className="icono-img icono-cotizacion" alt="notas" /> Notas:</span>
-                    <p>{orden.detail}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="orden-card-actions">
-                <select
-                  className="estado-select"
-                  value={orden.estado}
-                  onChange={e =>
-                    handleUpdateEstado(orden.id, e.target.value as EstadoOrden)
-                  }
-                >
-                  <option value="en_proceso">En Proceso</option>
-                  <option value="entregado">Entregado</option>
-                  <option value="cancelado">Cancelado</option>
-                </select>
-                
-                <button className="btn-secondary sm" onClick={() => setViewingOrden(orden)}>
-                  <img src={viewIcon} className="icono-img icono-view" alt="ver" /> Ver
-                </button>
-                <button className="btn-secondary sm" onClick={() => setEditingOrden(orden)}>
-                  <img src={editIcon} className="icono-img icono-edit" alt="editar" /> Editar
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="table-responsive">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Trabajo</th>
+                <th>Cliente</th>
+                <th>Cantidad</th>
+                <th>Total</th>
+                <th>Estado</th>
+                <th>Entrega</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredOrdenes.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
+                    No hay órdenes encontradas
+                  </td>
+                </tr>
+              ) : (
+                filteredOrdenes.map(orden => (
+                  <tr key={orden.id}>
+                    <td><strong>{orden.id}</strong></td>
+                    <td>
+                      <div>{orden.nombre_trabajo || 'Sin nombre'}</div>
+                      {orden.detail && <small style={{ color: 'var(--text-secondary)' }}>{orden.detail}</small>}
+                    </td>
+                    <td>{orden.cliente_nombre || '—'}</td>
+                    <td>{orden.cantidad || 0}</td>
+                    <td>{formatMoney(orden.precio_total)}</td>
+                    <td>
+                      <select
+                        className={`estado-select-mini ${orden.estado}`}
+                        value={orden.estado}
+                        onChange={e => handleUpdateEstado(orden.id, e.target.value as EstadoOrden)}
+                        style={{ padding: '4px', borderRadius: '4px', border: '1px solid #ddd' }}
+                      >
+                        <option value="en_proceso">En Proceso</option>
+                        <option value="entregado">Entregado</option>
+                        <option value="cancelado">Cancelado</option>
+                      </select>
+                    </td>
+                    <td>{formatDate(orden.fecha_entrega)}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                          className="icon-btn" 
+                          onClick={() => setViewingOrden(orden)}
+                          title="Ver Detalles"
+                        >
+                          <img src={viewIcon} className="icono-img" alt="ver" />
+                        </button>
+                        <button 
+                          className="icon-btn" 
+                          onClick={() => setEditingOrden(orden)}
+                          title="Editar"
+                        >
+                          <img src={editIcon} className="icono-img" alt="editar" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -281,7 +276,7 @@ export const OrdenesView = ({ onClose, config }: Props) => {
       {/* Modal de detalles (WorkClientView) */}
       {viewingOrden && config && (
         <WorkClientView 
-          order={viewingOrden} 
+          order={viewingOrden as unknown as import('../../types').Cotizacion} 
           clientName={viewingOrden.cliente_nombre || 'Cliente'} 
           onClose={() => setViewingOrden(null)}
           config={config} 

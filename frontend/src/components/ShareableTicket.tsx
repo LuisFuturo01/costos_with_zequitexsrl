@@ -9,9 +9,11 @@ interface Props {
   quantity: number;
   jobName?: string;
   client: Client | null; // Objeto Cliente estricto
+  cotizacionId?: number; // ID de cotización guardada (requerido para enviar por WhatsApp)
+  mensajeAdicional?: string; // Mensaje adicional opcional
 }
 
-export const ShareableTicket = ({ result, config, quantity, jobName, client }: Props) => {
+export const ShareableTicket = ({ result, config, quantity, jobName, client, cotizacionId, mensajeAdicional }: Props) => {
   const ticketRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
   
@@ -20,7 +22,7 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
   const [modalConfig, setModalConfig] = useState({ title: '', message: '', type: 'info' as 'info'|'success'|'error' });
   const [pendingWaLink, setPendingWaLink] = useState<string | null>(null);
 
-  // --- CÁLCULOS PARA LA IMAGEN ---
+  // --- CÁLCULOS PARA LA IMAGEN (usando datos del breakdown guardados en DB) ---
   const bd = result.breakdown as any;
   const precioUnitario = result.precio_sugerido || 0;
   
@@ -34,10 +36,16 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
   const montoDescuento = subtotal * discountPercent;
   const totalPagar = subtotal - montoDescuento;
   
-  // Desglose simplificado para la imagen
-  const costoPuntadas = Number(bd?.puntadas) || 0;
-  const costoTela = Number(bd?.tela) || 0;
-  const costoOtros = Math.max(0, precioUnitario - costoPuntadas - costoTela);
+  // Obtener costos del breakdown guardado en la DB
+  const costoPuntadas = Number(bd?.puntadas) || 0;  // Costo de puntadas
+  const costoColores = Number(bd?.colores) || 0;    // Costo cambio de hilos
+  const costoPellon = Number(bd?.pellon) || 0;      // Costo pellón
+  const costoTela = Number(bd?.tela) || 0;          // Costo tela
+  const costoCorte = Number(bd?.corte) || 0;        // Costo corte
+  const costoImpresion = Number(bd?.impresion) || 0; // Costo sublimación
+  
+  // "Otros" = todo lo que no es puntadas
+  const costoOtros = costoColores + costoPellon + costoTela + costoCorte + costoImpresion;
   
   const formatMoney = (val: number) => 
     new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' }).format(val);
@@ -59,7 +67,18 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
   };
 
   const handleShare = async () => {
-    // === 1. VALIDACIÓN ESTRICTA: SI NO HAY CLIENTE, NO AVANZA ===
+    // === 1. VALIDACIÓN: COTIZACIÓN DEBE ESTAR GUARDADA ===
+    if (!cotizacionId) {
+        setModalConfig({
+            title: 'Cotización No Guardada',
+            message: '⚠️ Debes GUARDAR la cotización antes de poder enviarla por WhatsApp. La cotización necesita un número de identificación.',
+            type: 'error'
+        });
+        setModalOpen(true);
+        return;
+    }
+
+    // === 2. VALIDACIÓN ESTRICTA: SI NO HAY CLIENTE, NO AVANZA ===
     if (!client || !client.nombre || client.nombre.trim() === '') {
         setModalConfig({
             title: 'Cliente Requerido',
@@ -74,7 +93,7 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
     setIsSharing(true);
 
     try {
-      // 2. Generar Imagen (PNG)
+      // 3. Generar Imagen (PNG)
       const canvas = await html2canvas(ticketRef.current, {
         scale: 2,
         backgroundColor: '#ffffff',
@@ -88,7 +107,28 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
           return;
         }
 
-        const textMessage = `Hola ${client.nombre}, aquí tienes la cotización detallada para "${jobName || 'Bordado'}".\n\n💰 *Total: ${formatMoney(totalPagar)}*\n(Te adjunto el detalle en la imagen 👇)`;
+        // Construir mensaje de WhatsApp con formato requerido
+        const textLines = [
+          `📋 *COTIZACIÓN #${cotizacionId}*`,
+          ``,
+          `Hola ${client.nombre}, aquí tienes tu cotización para "${jobName || 'Bordado'}":`,
+          ``,
+          `🧵 *Puntadas:* ${result.estimatedStitches ? Math.round(result.estimatedStitches).toLocaleString() : 0} pts`,
+          `💰 *Costo bordado:* ${formatMoney(costoPuntadas)}`,
+          `📦 *Otros costos:* ${formatMoney(costoOtros)}`,
+          ``,
+          `💵 *TOTAL: ${formatMoney(totalPagar)}* (${quantity} pzs)`,
+        ];
+        
+        if (mensajeAdicional && mensajeAdicional.trim()) {
+          textLines.push(``);
+          textLines.push(`📝 ${mensajeAdicional}`);
+        }
+        
+        textLines.push(``);
+        textLines.push(`(Te adjunto el detalle en la imagen 👇)`);
+
+        const textMessage = textLines.join('\n');
         
         const waLink = getWhatsAppLink(textMessage);
         const hasValidPhone = client.numero_referencia && client.numero_referencia.replace(/\D/g, '').length > 5;
@@ -102,8 +142,8 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
             });
             setIsSharing(false);
             return;
-          } catch (e) {
-            console.log("Usuario canceló share móvil.");
+          } catch {
+            //console.log("Usuario canceló share móvil.");
           }
         }
 
@@ -201,6 +241,9 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
           <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '4px solid #10b981', paddingBottom: '20px', marginBottom: '20px' }}>
             <div>
               <h2 style={{ margin: 0, fontSize: '26px', color: '#111827', fontWeight: '900', letterSpacing: '-0.5px' }}>COTIZACIÓN</h2>
+              <div style={{ fontSize: '14px', color: '#6b7280', fontWeight: 'bold' }}>
+                {cotizacionId ? `N° ${cotizacionId.toString().padStart(6, '0')}` : 'Borrador'} 
+              </div>
               <p style={{ margin: '5px 0 0', fontSize: '16px', color: '#4b5563' }}>{jobName || 'Servicio de Bordado'}</p>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -217,7 +260,7 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
              ) : ( <span style={{color:'#ccc'}}>Sin vista previa</span> )}
           </div>
 
-          {/* Tabla de Precios Detallada */}
+          {/* Tabla de Precios Simplificada */}
           <div style={{ marginBottom: '25px' }}>
             <h3 style={{ fontSize: '14px', textTransform: 'uppercase', color: '#6b7280', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '12px' }}>
               Composición del Precio Unitario
@@ -227,30 +270,21 @@ export const ShareableTicket = ({ result, config, quantity, jobName, client }: P
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'flex-start' }}>
               <div>
                 <span style={{ fontWeight: '600', color: '#374151' }}>Bordado / Puntadas</span>
-                <div style={{ fontSize: '12px', color: '#9ca3af' }}>{result.estimatedStitches ? Math.round(result.estimatedStitches).toLocaleString() : 0} pts • {result.numColors} colores</div>
+                <div style={{ fontSize: '12px', color: '#9ca3af' }}>{result.estimatedStitches ? Math.round(result.estimatedStitches).toLocaleString() : 0} pts</div>
               </div>
               <strong style={{ color: '#1f2937' }}>{formatMoney(costoPuntadas)}</strong>
             </div>
 
-            {/* 2. Tela */}
-            {costoTela > 0 && (
+            {/* 2. Otros (suma de todo lo demás) */}
+            {costoOtros > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontWeight: '600', color: '#374151' }}>Tela Base</span>
-                  <div style={{ fontSize: '12px', color: '#9ca3af' }}>Material incluido</div>
+                  <span style={{ fontWeight: '600', color: '#374151' }}>Otros</span>
+                  <div style={{ fontSize: '12px', color: '#9ca3af' }}>Materiales e insumos</div>
                 </div>
-                <strong style={{ color: '#1f2937' }}>{formatMoney(costoTela)}</strong>
+                <strong style={{ color: '#1f2937' }}>{formatMoney(costoOtros)}</strong>
               </div>
             )}
-
-            {/* 3. Otros */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'flex-start' }}>
-              <div>
-                <span style={{ fontWeight: '600', color: '#374151' }}>Insumos y Procesos</span>
-                <div style={{ fontSize: '12px', color: '#9ca3af' }}>Hilos, pellón, corte y acabados</div>
-              </div>
-              <strong style={{ color: '#1f2937' }}>{formatMoney(costoOtros)}</strong>
-            </div>
 
             {/* Subtotal Unitario */}
             <div style={{ borderTop: '1px dashed #d1d5db', marginTop: '10px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>

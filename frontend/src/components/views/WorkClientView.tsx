@@ -28,19 +28,31 @@ export const WorkClientView = ({ order, clientName, onClose, config, onSaveNewOr
   // --- LEER DATOS ORIGINALES PARA ESTADO INICIAL ---
   const initialData = useMemo(() => {
     let extra: any = {};
-    try { if (order.datos_json) extra = JSON.parse(order.datos_json); } catch (e) {}
-    const bd = extra.breakdown || {};
+    let imagenStored = null;
+
+    if (order.datos_json) {
+        if (order.datos_json.trim().startsWith('{')) {
+            // Legacy: JSON completo
+            try { extra = JSON.parse(order.datos_json); } catch (e) {}
+            imagenStored = extra.imagen_procesada || null;
+        } else {
+            // New: Solo la imagen en base64
+            imagenStored = order.datos_json;
+        }
+    }
     
-    // Detectar si tenía sublimación (por flag o por precio histórico)
-    const hadSublimation = order.tiene_sublimacion || (bd.impresion && bd.impresion > 0) || false;
-    // Detectar si tenía apliqué (por costo de corte > 0)
-    const hasAplique = (bd.corte && bd.corte > 0) || false;
+    // Detectar si tenía sublimación desde la columna guardada
+    const hadSublimation = order.tiene_sublimacion || false;
+    // Detectar si tenía apliqué (tipo_tela Estructurante implica apliqué típicamente)
+    // O si el nombre de laprenda sugiere apliqué. Por ahora nos fiamos del tipo de tela
+    const hasAplique = order.tipo_tela === 'Estructurante';
 
     return {
         hasAplique,
         fabricType: order.tipo_tela || 'Normal',
         hadSublimation,
-        extra
+        extra, // Mantenemos extra por si acaso, pero ya no dependemos de él para la imagen
+        imagenStored
     };
   }, [order]);
 
@@ -115,7 +127,7 @@ export const WorkClientView = ({ order, clientName, onClose, config, onSaveNewOr
       // 6. SUBLIMACIÓN (Lógica Compleja de Rollos - Idéntica a ManualMode)
       let costoImpresion = 0;
       if (editData.tieneSublimacion) {
-          const COSTO_ROLLO = p.costo_rollo ?? 0;
+          const COSTO_ROLLO = p.rollo_papel ?? 0;
           const PRECIO_IMPRESION = p.costo_impresion ?? 0;
           const ROLLO_ANCHO_CM = 100;
           const ROLLO_LARGO_CM = 10000; 
@@ -175,24 +187,12 @@ export const WorkClientView = ({ order, clientName, onClose, config, onSaveNewOr
 
   // --- GUARDAR COMO NUEVA ---
   const handleSaveAsNew = () => {
-      const breakdown = {
-          puntadas: Number(calculatedData.costoPuntadas.toFixed(2)),
-          colores: Number(calculatedData.costoColores.toFixed(2)),
-          pellon: Number(calculatedData.costoPellon.toFixed(2)),
-          tela: Number(calculatedData.costoTela.toFixed(2)),
-          corte: Number(calculatedData.costoCorte.toFixed(2)),
-          impresion: Number(calculatedData.costoImpresion.toFixed(2)),
-          bastidorNombre: calculatedData.bastidorNombre,
-          cantidadUnidades: editData.cantidad
-      };
-
       let mensaje = `Tela: ${editData.tipoTela}`;
       if (editData.tieneAplique) mensaje += ' • Con Apliqué';
       if (editData.tieneSublimacion) mensaje += ' • Con Sublimación';
 
       const fullDataSnapshot = {
-          ...initialData.extra, // Mantener imagen original
-          breakdown,
+          imagen_procesada: initialData.extra?.imagen_procesada || null,
           mensaje,
           descuento_aplicado: calculatedData.discountPercent,
           fecha_calculo: new Date().toISOString()
@@ -216,22 +216,98 @@ export const WorkClientView = ({ order, clientName, onClose, config, onSaveNewOr
       onSaveNewOrder(payload);
   };
 
-  // --- LECTURA (DATOS GUARDADOS) ---
+  // --- LECTURA (DATOS GUARDADOS) - Usa valores recalculados ---
   const readOnlyData = useMemo(() => {
-    let extra: any = {};
-    try { if (order.datos_json) extra = JSON.parse(order.datos_json); } catch (e) {}
-    const bd = extra.breakdown || {};
+    // Ya no re-parseamos datos_json aquí, usamos initialData
+    
+    // Recalcular costos basándose en los datos guardados de la orden + config actual
+    const p = config.pricing;
+    const areaDiseno = order.ancho * order.alto;
+    
+    // Bastidor
+    const bastidorObj = BASTIDORES_LISTA
+        .slice().sort((a, b) => a.size - b.size)
+        .find(b => areaDiseno <= (b.size ** 2)) ?? BASTIDORES_LISTA[BASTIDORES_LISTA.length - 1];
+    const areaBastidorReal = bastidorObj.size ** 2;
+    
+    // Costos recalculados
+    let finalStitches = order.puntadas || 0;
+    if (finalStitches < 2000 && finalStitches > 0) finalStitches = 2000;
+    const costoPuntadas = (finalStitches / 1000) * p.precio_stitch_1000;
+    const costoColores = (order.colores || 1) * p.factor_cambio_hilo;
+    
+    let FACTOR_PELLON = (p.costo_pellon ?? 300) / 1000000;
+    if (areaBastidorReal <= 450) FACTOR_PELLON *= 3.8;
+    else if (areaBastidorReal <= 900) FACTOR_PELLON *= 3.2;
+    else if (areaBastidorReal <= 1600) FACTOR_PELLON *= 2.5;
+    else FACTOR_PELLON *= 1.5;
+    const costoPellon = Math.ceil((areaBastidorReal * FACTOR_PELLON) / 0.05) * 0.05;
+    
+    // Tela (solo si hay apliqué - detectado por tipo_tela Estructurante)
+    let costoTela = 0;
+    const tieneAplique = order.tipo_tela === 'Estructurante';
+    if (tieneAplique) {
+        const precioTelaCm2 = (order.tipo_tela === 'Estructurante' ? p.tela_estructurante : p.tela_normal) / 15000;
+        costoTela = Number((areaDiseno * precioTelaCm2).toFixed(2));
+        if (areaDiseno <= 450) costoTela *= 2.05;
+        else if (areaDiseno <= 900) costoTela *= 2.2;
+        else if (areaDiseno <= 1600) costoTela *= 2.4;
+        else costoTela *= 2.6;
+    }
+    
+    // CORTE: Si hay apliqué, se cobra el corte del bastidor
+    const costoCorte = tieneAplique ? bastidorObj.corte : 0;
+    
+    // IMPRESIÓN: Si hay sublimación
+    // Para histórico, si no tenemos datos precisos de rollo, usamos un estimado o re-calculamos igual que en ManualMode
+    // Aquí usamos una simplificación o la misma lógica si queremos precisión.
+    // Usaremos la lógica simplificada de "tiene_sublimacion" -> cobrar algo mínimo o recalcular bien si es posible.
+    // Dado que no tenemos el "ancho del rollo" histórico guardado, usamos constants.
+    let costoImpresion = 0;
+    if (order.tiene_sublimacion) {
+         // Replicamos lógica ManualMode simplificada o asumimos un costo base si faltan datos
+         // Mejor intentar recalcular con la lógica de rollos actual
+          const COSTO_ROLLO = p.rollo_papel ?? 0;
+          const PRECIO_IMPRESION = p.costo_impresion ?? 0;
+          const ROLLO_ANCHO_CM = 100;
+          const ROLLO_LARGO_CM = 10000; 
+          const AREA_TOTAL_ROLLO = ROLLO_ANCHO_CM * ROLLO_LARGO_CM;
+          
+          // Asumimos cantidad 1 para el costo unitario base, o la cantidad real de la orden?
+          // El precio unitario depende de la cantidad en sublimación (desperdicio).
+          // Usaremos order.cantidad
+          const imgW = order.ancho;
+          const imgH = order.alto;
+          
+           if (imgW > 0 && imgH > 0 && imgW <= ROLLO_ANCHO_CM) {
+              const imagenesPorFila = Math.floor(ROLLO_ANCHO_CM / imgW);
+              const filasNecesarias = imagenesPorFila > 0 ? Math.ceil((order.cantidad || 1) / imagenesPorFila) : 0;
+              const largoCortadoCm = filasNecesarias * imgH;
+              const areaUsadaRollo = largoCortadoCm * ROLLO_ANCHO_CM;
+              
+              // Costo total del rollo usado
+              const costoTotalLote = (areaUsadaRollo / AREA_TOTAL_ROLLO) * COSTO_ROLLO;
+              
+              // Costo por unidad
+              costoImpresion = costoTotalLote / (order.cantidad || 1);
+
+              const COSTO_MINIMO = PRECIO_IMPRESION * 0.25;
+              if (costoImpresion < COSTO_MINIMO) costoImpresion = COSTO_MINIMO;
+              costoImpresion = Math.ceil(costoImpresion / 0.05) * 0.05;
+           }
+    }
+    
     return {
         ...order,
-        costoPuntadas: bd.puntadas || 0,
-        costoColores: bd.colores || 0,
-        costoPellon: bd.pellon || 0,
-        costoTela: bd.tela || 0,
-        costoCorte: bd.corte || 0,
-        costoImpresion: bd.impresion || 0,
-        imagen: extra.imagen_procesada || ""
+        costoPuntadas,
+        costoColores,
+        costoPellon,
+        costoTela,
+        costoCorte,
+        costoImpresion,
+        imagen: initialData.imagenStored || ""
     };
-  }, [order]);
+  }, [order, config, initialData]);
 
   const formatMoney = (val: number) => new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' }).format(val);
   const handlePrint = () => { setTimeout(() => window.print(), 200); };
