@@ -1,0 +1,10 @@
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Dumps de base de datos
+*.sql
+/dumps/
+/backups/
+/database/exports/
