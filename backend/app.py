@@ -157,11 +157,17 @@ def create_order():
         db.session.rollback()
         return jsonify({"success": False, "message": f"Error SQL: {str(e)}"}), 500
 
+@app.route('/orders/<int:id>', methods=['GET'])
+def get_order_detail(id):
+    """Obtener detalle completo de una cotización"""
+    cot = Cotizacion.query.get_or_404(id)
+    return jsonify(cot.to_dict())
+
 @app.route('/clients/<int:client_id>/orders', methods=['GET'])
 def get_client_orders(client_id):
     try:
         cotizaciones = Cotizacion.query.filter_by(cliente_id=client_id).order_by(Cotizacion.fecha_pedido.desc()).all()
-        return jsonify([c.to_dict() for c in cotizaciones])
+        return jsonify([c.to_summary_dict() for c in cotizaciones])
     except Exception as e:
         print(f"Error in get_client_orders: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
@@ -175,7 +181,7 @@ def get_ordenes():
     """Listar todas las órdenes ordenadas por fecha de entrega"""
     try:
         ordenes = Orden.query.order_by(Orden.fecha_entrega.asc(), Orden.fecha_creacion.desc()).all()
-        return jsonify([o.to_dict() for o in ordenes])
+        return jsonify([o.to_summary_dict() for o in ordenes])
     except Exception as e:
         print(f"Error in get_ordenes: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
@@ -184,7 +190,7 @@ def get_ordenes():
 def get_client_ordenes(client_id):
     """Listar órdenes de un cliente específico"""
     ordenes = Orden.query.join(Cotizacion).filter(Cotizacion.cliente_id == client_id).order_by(Orden.fecha_creacion.desc()).all()
-    return jsonify([o.to_dict() for o in ordenes])
+    return jsonify([o.to_summary_dict() for o in ordenes])
 
 @app.route('/ordenes', methods=['POST'])
 def create_orden():
@@ -212,6 +218,7 @@ def create_orden():
         
         new_orden = Orden(
             cotizacion_id=cotizacion_id,
+            cliente_id=cotizacion.cliente_id, # Copy client ID from cotizacion
             estado=data.get('estado', 'en_proceso'),
             fecha_entrega=fecha_entrega,
             detail=data.get('detail', '')
@@ -223,6 +230,12 @@ def create_orden():
         print("Error creating orden:", e)
         db.session.rollback()
         return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
+
+@app.route('/ordenes/<int:id>', methods=['GET'])
+def get_orden_detail(id):
+    """Obtener detalle completo de una orden"""
+    orden = Orden.query.get_or_404(id)
+    return jsonify(orden.to_dict())
 
 @app.route('/ordenes/<int:id>', methods=['PUT'])
 def update_orden(id):
@@ -268,6 +281,17 @@ def delete_orden(id):
 # 🖼️ PROCESAMIENTO
 # ==========================================
 
+import cloudinary
+import cloudinary.uploader
+
+# Cloudinary Config
+cloudinary.config( 
+    cloud_name = "duaygs2wg", 
+    api_key = "164218529945144", 
+    api_secret = "egETNReBOVubf_K52qBIpJYMoPg", 
+    secure=True
+)
+
 @app.route('/process', methods=['POST'])
 def process_image():
     if 'image' not in request.files:
@@ -311,9 +335,13 @@ def process_image():
         precio_calculado = costo_puntadas + costo_cambios_color + costo_pellon_final
         precio_final = max(precio_calculado, 10) 
 
+        # Upload to Cloudinary
         buffered = io.BytesIO()
         output_image.save(buffered, format="PNG")
-        img_str = base64.b64encode(buffered.getvalue()).decode()
+        buffered.seek(0)
+        
+        upload_result = cloudinary.uploader.upload(buffered, folder="zequitex_orders", resource_type="image")
+        image_url = upload_result.get("secure_url")
 
         return jsonify({
             "success": True,
@@ -331,7 +359,7 @@ def process_image():
                 "hilos": 0, "base": 0, "tela": 0, "corte": 0
             },
             "precio_sugerido": round(precio_final, 2),
-            "imagen_procesada": f"data:image/png;base64,{img_str}",
+            "imagen_procesada": image_url, # Now returns URL
             "mensaje": "Procesamiento automático"
         })
 

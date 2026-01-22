@@ -612,7 +612,7 @@ select.styled-input:hover:not(:disabled):not(:focus) {
   animation: slideUp 0.3s ease;
 }
 .modal-lg{
-  min-width: 720px;
+  
 }
 .modal-card h3 {
   font-size: var(--font-size-xl);
@@ -2936,5 +2936,38 @@ button.sm-salir{
   color: white !important;
   &:hover{
     color: #000 !important;
+  }
+}
+.data-table{
+  max-height: 80vh;
+}
+.cotizacion-clientes{
+  .data-table{
+    
+    thead{
+      tr{
+        min-width: 800px;
+        th{
+          margin: 0;
+        }
+      }
+    }
+    tbody{
+      tr{
+        min-width: 800px;
+        td{
+          margin: 0;
+        }
+      }
+    }
+  }
+}
+.modal-lg{
+  min-width: 1000px;
+  max-height: 80vh;
+}
+@media (max-width: 480px) {
+  .modal-lg{
+    min-width: 0;
   }
 }

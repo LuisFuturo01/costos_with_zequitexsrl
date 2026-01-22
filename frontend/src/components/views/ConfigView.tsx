@@ -28,14 +28,14 @@ interface Props {
 const PRICE_FIELDS = [
   { key: 'precio_stitch_1000', label: '1.000 puntadas' },
   { key: 'factor_cambio_hilo', label: 'Factor Cambio Hilo' },
-  { key: 'costo_hilo_bordar', label: 'Costo Hilo Bordar' },
-  { key: 'costo_hilo_bobina', label: 'Costo Hilo Bobina' },
+  { key: 'costo_hilo_bordar', label: 'Costo Hilo Bordar (cono)' },
+  { key: 'costo_hilo_bobina', label: 'Costo Hilo Bobina (cono)' },
   { key: 'costo_pellon', label: 'Costo Rollo de pellon' },
-  { key: 'tela_estructurante', label: 'Costo Tela Estructurante por metro' },
-  { key: 'tela_normal', label: 'Costo Tela Normal por metro' },
+  { key: 'tela_estructurante', label: 'Costo Tela Estructurante (metro)' },
+  { key: 'tela_normal', label: 'Costo Tela Normal (metro)' },
   { key: 'rollo_papel', label: 'Costo Rollo de papel' },
-  { key: 'costo_impresion', label: 'Costo Impresión (30x30)' },
-  { key: 'corte_impresion', label: 'Costo Corte de Aplicación por minuto' }
+  { key: 'costo_impresion', label: 'Costo Impresión (30x30 cm)' },
+  { key: 'corte_impresion', label: 'Costo Corte de Aplicación (minuto)' }
 ];
 
 export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentUser }: Props) => {
@@ -44,8 +44,17 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
 
   const [activeTab, setActiveTab] = useState<'precios' | 'historial' | 'usuarios' | 'clientes' | 'ordenes'>('precios');
   
-  const [users, setUsers] = useState<User[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
+  const CACHE_KEY_USERS = 'zequitex_users';
+  const CACHE_KEY_CLIENTS = 'zequitex_clients';
+
+  const [users, setUsers] = useState<User[]>(() => {
+      const cached = localStorage.getItem(CACHE_KEY_USERS);
+      return cached ? JSON.parse(cached) : [];
+  });
+  const [clients, setClients] = useState<Client[]>(() => {
+      const cached = localStorage.getItem(CACHE_KEY_CLIENTS);
+      return cached ? JSON.parse(cached) : [];
+  });
   const [priceHistory, setPriceHistory] = useState<Pricing[]>([]);
   const [clientOrders, setClientOrders] = useState<Order[]>([]);
   
@@ -65,6 +74,9 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
   
   const [orderFromCotizacion, setOrderFromCotizacion] = useState<Order | null>(null);
   const [newOrderFechaEntrega, setNewOrderFechaEntrega] = useState('');
+  
+  // Trigger para actualizar la vista de órdenes
+  const [refreshOrdenesTrigger, setRefreshOrdenesTrigger] = useState(0);
 
   useEffect(() => {
     if (activeTab === 'usuarios' && isAdmin) loadUsers();
@@ -72,8 +84,8 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
     if (activeTab === 'historial' && isAdmin) loadHistory();
   }, [activeTab, isAdmin, canManageClients]);
 
-  const loadUsers = () => api.getUsers().then(setUsers).catch(console.error);
-  const loadClients = () => api.getClients().then(setClients).catch(console.error);
+  const loadUsers = () => api.getUsers().then(data => { setUsers(data); localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(data)); }).catch(console.error);
+  const loadClients = () => api.getClients().then(data => { setClients(data); localStorage.setItem(CACHE_KEY_CLIENTS, JSON.stringify(data)); }).catch(console.error);
   
   const loadHistory = async () => {
       try {
@@ -119,6 +131,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
       setAlertInfo({ open: true, msg: '✅ Orden creada correctamente' });
       setOrderFromCotizacion(null);
       setNewOrderFechaEntrega('');
+      setRefreshOrdenesTrigger(prev => prev + 1); // Forzar recarga de OrdenesView
       if (selectedClientForOrders) {
         const updatedOrders = await api.getClientOrders(selectedClientForOrders.id);
         setClientOrders(updatedOrders);
@@ -256,7 +269,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
         {/* TAB ÓRDENES */}
         {activeTab === 'ordenes' && (
             <div className="card">
-                <OrdenesView config={config} />
+                <OrdenesView config={config} refreshTrigger={refreshOrdenesTrigger} />
             </div>
         )}
 
@@ -268,6 +281,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                 config={config} 
                 onSaveNewOrder={handleCloneOrder}
                 docType={viewingDocType}
+                client={selectedClientForOrders}
             />
         )}
 
@@ -327,7 +341,7 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
                                 <h3><img src={cotizacionIcon} className="icono-img icono-cotizacion" alt="cotización" /> Cotizaciones: {selectedClientForOrders.nombre}</h3>
                                 <button className="icon-btn" onClick={() => { setSelectedClientForOrders(null); setViewMode(null); }}><img src={closeIcon} className="icono-img icono-close icono-no-margin" alt="cerrar" /></button>
                             </div>
-                            <div className="table-container-scroll">
+                            <div className="table-container-scroll cotizacion-clientes">
                                 {clientOrders.length === 0 ? <p>No hay cotizaciones guardadas.</p> : (
                                     <table className="data-table">
                                         <thead>

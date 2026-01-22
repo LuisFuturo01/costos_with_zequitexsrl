@@ -116,18 +116,42 @@ class Cotizacion(db.Model):
             "detalles": self.detalles 
         }
 
+    def to_summary_dict(self):
+        return {
+            "id": self.id,
+            "cliente_id": self.cliente_id,
+            "configuracion_id": self.configuracion_id,
+            "nombre_trabajo": self.nombre_trabajo,
+            "fecha_pedido": self.fecha_pedido.isoformat() if self.fecha_pedido else None,
+            "puntadas": self.puntadas,
+            "colores": self.colores,
+            "ancho": float(self.ancho) if self.ancho else 0,
+            "alto": float(self.alto) if self.alto else 0,
+            "bastidor": self.bastidor,
+            "tipo_tela": self.tipo_tela,
+            "tiene_sublimacion": self.tiene_sublimacion,
+            "cantidad": self.cantidad,
+            "precio_unitario": float(self.precio_unitario) if self.precio_unitario else 0,
+            "precio_total": float(self.precio_total) if self.precio_total else 0,
+            # Exclude heavy fields
+            # "datos_json": self.datos_json,
+            # "detalles": self.detalles 
+        }
+
 # --- ÓRDENES (Nueva tabla) ---
 class Orden(db.Model):
     __tablename__ = 'orden'
     
     id = db.Column(db.Integer, primary_key=True)
     cotizacion_id = db.Column(db.Integer, db.ForeignKey('cotizacion.id'), nullable=False)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False) # Restore missing column
     estado = db.Column(db.String(20), nullable=False, default='en_proceso')  # en_proceso, cancelado, entregado
     fecha_entrega = db.Column(db.Date, nullable=True)
     detail = db.Column(db.Text)  # Observaciones durante el proceso
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     
     cotizacion = db.relationship('Cotizacion', backref=db.backref('orden', uselist=False))
+    cliente = db.relationship('Clientes', backref=db.backref('ordenes', lazy=True))
 
     def to_dict(self):
         cot = self.cotizacion
@@ -156,6 +180,27 @@ class Orden(db.Model):
             "datos_json": cot.datos_json if cot else None,
              # Precio unitario también es útil
             "precio_unitario": float(cot.precio_unitario) if cot and cot.precio_unitario is not None else 0.0
+        }
+
+    def to_summary_dict(self):
+        cot = self.cotizacion
+        return {
+            "id": self.id,
+            "cotizacion_id": self.cotizacion_id,
+            "estado": self.estado,
+            "fecha_entrega": self.fecha_entrega.isoformat() if self.fecha_entrega else None,
+            "detail": self.detail,
+            "fecha_creacion": self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            "cliente_id": cot.cliente_id if cot else None,
+            "nombre_trabajo": cot.nombre_trabajo if cot else None,
+            "cliente_nombre": cot.cliente.nombre if cot and cot.cliente else None,
+            "precio_total": float(cot.precio_total) if cot and cot.precio_total else 0,
+            "cantidad": cot.cantidad if cot else 0,
+            "fecha_pedido": cot.fecha_pedido.isoformat() if cot and cot.fecha_pedido else None,
+            "puntadas": cot.puntadas if cot else 0,
+            "colores": cot.colores if cot else 1,
+            # Exclude heavy fields
+            # "datos_json": cot.datos_json if cot else None,
         }
 
 def init_db_data(app):

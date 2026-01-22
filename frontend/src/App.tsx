@@ -31,9 +31,19 @@ const BASTIDORES_DISPONIBLES = [
 ];
 
 function App() {
+  // --- CACHE KEYS ---
+  const CACHE_KEY_CONFIG = 'zequitex_config';
+  const CACHE_KEY_CLIENTS = 'zequitex_clients';
+
   const [view, setView] = useState<View>('main');
   const [mode, setMode] = useState<TabMode>('upload');
-  const [config, setConfig] = useState<Config | null>(null);
+  
+  // Cache-first initialization
+  const [config, setConfig] = useState<Config | null>(() => {
+    const cached = localStorage.getItem(CACHE_KEY_CONFIG);
+    return cached ? JSON.parse(cached) : null;
+  });
+
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
@@ -42,7 +52,12 @@ function App() {
   const [selectedFile, setSelectedFile] = useState<File | Blob | null>(null);
   const [manualQuantity, setManualQuantity] = useState(1);
 
-  const [clients, setClients] = useState<Client[]>([]);
+  // Cache-first initialization
+  const [clients, setClients] = useState<Client[]>(() => {
+    const cached = localStorage.getItem(CACHE_KEY_CLIENTS);
+    return cached ? JSON.parse(cached) : [];
+  });
+
   const [selectedClientId, setSelectedClientId] = useState<number | string>(""); 
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [newClientName, setNewClientName] = useState("");
@@ -88,10 +103,14 @@ function App() {
 
   const loadData = async () => {
       try {
+          // Background refresh
           const cfg = await api.getConfig();
           setConfig(cfg);
+          localStorage.setItem(CACHE_KEY_CONFIG, JSON.stringify(cfg));
+
           const cls = await api.getClients();
           setClients(cls);
+          localStorage.setItem(CACHE_KEY_CLIENTS, JSON.stringify(cls));
       } catch (err) { console.error(err); }
   };
 

@@ -15,11 +15,12 @@ import editIcon from '../../assets/images/edit.svg';
 interface Props {
   onClose?: () => void;
   config?: Config;
+  refreshTrigger?: number;
 }
 
 // (Styles removed as they are no longer used in Table View)
 
-export const OrdenesView = ({ onClose, config }: Props) => {
+export const OrdenesView = ({ onClose, config, refreshTrigger }: Props) => {
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterEstado, setFilterEstado] = useState<EstadoOrden | 'todos'>('todos');
@@ -36,7 +37,7 @@ export const OrdenesView = ({ onClose, config }: Props) => {
 
   useEffect(() => {
     loadOrdenes();
-  }, []);
+  }, [refreshTrigger]);
 
   const loadOrdenes = async () => {
     setLoading(true);

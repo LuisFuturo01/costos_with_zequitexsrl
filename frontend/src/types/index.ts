@@ -104,6 +104,7 @@ export interface Cotizacion {
   
   datos_json: string; 
   detalles?: string; 
+  cliente_nombre?: string;
 }
 
 // Alias para compatibilidad con código existente

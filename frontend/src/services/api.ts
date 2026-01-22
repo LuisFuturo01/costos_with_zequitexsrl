@@ -86,6 +86,14 @@ export const api = {
     return res.json();
   },
 
+  deleteClient: async (id: number) => {
+    const res = await fetch(`${API_URL}/clients/${id}`, { 
+      method: 'DELETE',
+      headers: headersBase 
+    });
+    return res.json();
+  },
+
   // --- PROCESAMIENTO DE IMÁGENES ---
   processImage: async (formData: FormData): Promise<ProcessResult> => {
     const res = await fetch(`${API_URL}/process`, {
@@ -104,12 +112,62 @@ export const api = {
     return res.json();
   },
 
+  getClientOrders: async (clientId: number): Promise<Cotizacion[]> => {
+    const res = await fetch(`${API_URL}/clients/${clientId}/orders`, { headers: headersBase });
+    return res.json();
+  },
+
+  getClientOrdenes: async (clientId: number): Promise<Orden[]> => {
+    const res = await fetch(`${API_URL}/clients/${clientId}/ordenes`, { headers: headersBase });
+    return res.json();
+  },
+
+  getOrdenDetail: async (id: number): Promise<Orden> => {
+    const res = await fetch(`${API_URL}/ordenes/${id}`, { headers: headersBase });
+    return res.json();
+  },
+
+  getCotizacionDetail: async (id: number): Promise<Cotizacion> => {
+    const res = await fetch(`${API_URL}/orders/${id}`, { headers: headersBase }); 
+    return res.json();
+  },
+
   createOrden: async (data: any) => {
     const res = await fetch(`${API_URL}/ordenes`, {
       method: 'POST',
       headers: headersJson,
       body: JSON.stringify(data)
     });
+    return res.json();
+  },
+
+  updateOrden: async (id: number, data: any) => {
+    const res = await fetch(`${API_URL}/ordenes/${id}`, {
+      method: 'PUT',
+      headers: headersJson,
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
+
+  deleteOrden: async (id: number) => {
+    const res = await fetch(`${API_URL}/ordenes/${id}`, {
+      method: 'DELETE',
+      headers: headersBase
+    });
+    return res.json();
+  },
+
+  saveOrder: async (orderData: any): Promise<{success: boolean, id: number, message?: string}> => {
+    const res = await fetch(`${API_URL}/orders`, {
+      method: 'POST',
+      headers: headersJson,
+      body: JSON.stringify(orderData)
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || 'Error al guardar cotización');
+    }
     return res.json();
   }
 };

@@ -168,7 +168,11 @@ export const ResultTicket = ({
         <div className="ticket-preview">
           {result.imagen_procesada ? (
             <img 
-                src={result.imagen_procesada.startsWith('data:') ? result.imagen_procesada : `data:image/jpeg;base64,${result.imagen_procesada}`} 
+                src={
+                    result.imagen_procesada.startsWith('http') || result.imagen_procesada.startsWith('data:')
+                    ? result.imagen_procesada 
+                    : `data:image/jpeg;base64,${result.imagen_procesada}`
+                } 
                 alt="Diseño Bordado" 
             />
           ) : (
