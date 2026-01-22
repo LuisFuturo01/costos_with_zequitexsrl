@@ -10,3 +10,4 @@ numpy
 pillow
 rembg[gpu]
 python-dotenv
+cloudinary

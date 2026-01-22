@@ -3,12 +3,17 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import io
-import base64
+import os
 import numpy as np
 from PIL import Image
 from rembg import remove
-import os
 from dotenv import load_dotenv
+
+# --- IMPORTACIONES DE CLOUDINARY ---
+import cloudinary
+import cloudinary.uploader
+# Importamos la clase CloudinaryImage para generar URLs robustas
+from cloudinary import CloudinaryImage 
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -21,14 +26,22 @@ except ImportError:
     print("⚠️ ADVERTENCIA: image_services.py no encontrado.")
 
 app = Flask(__name__)
-# Reemplaza CORS(app) por esto:
+# Configuración CORS
 CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers=["Content-Type", "skip_zrok_interstitial"])
 
-# Cargar configuración desde variables de entorno
+# Cargar configuración de DB
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'mysql+pymysql://root:@localhost/zequitexcotizador')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
+
+# --- CONFIGURACIÓN DE CLOUDINARY ---
+cloudinary.config( 
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"), 
+    api_key = os.getenv("CLOUDINARY_API_KEY"), 
+    api_secret = os.getenv("CLOUDINARY_API_SECRET"), 
+    secure=True
+)
 
 # ==========================================
 # 🔐 AUTENTICACIÓN
@@ -43,7 +56,6 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
-    # Validamos usuario y que 'activo' sea True
     user = Personal.query.filter_by(usuario=username, activo=True).first()
     
     if user and check_password_hash(user.password_hash, password):
@@ -56,7 +68,6 @@ def change_password():
     current = data.get('current_password')
     new_pass = data.get('new_password')
     
-    # Solo buscamos usuarios activos
     users = Personal.query.filter_by(activo=True).all()
     target_user = None
     for u in users:
@@ -122,7 +133,7 @@ def update_config():
     return jsonify({"success": True})
 
 # ==========================================
-# 📦 GESTIÓN DE COTIZACIONES (antes Órdenes)
+# 📦 GESTIÓN DE COTIZACIONES
 # ==========================================
 
 @app.route('/orders', methods=['POST'])
@@ -159,7 +170,6 @@ def create_order():
 
 @app.route('/orders/<int:id>', methods=['GET'])
 def get_order_detail(id):
-    """Obtener detalle completo de una cotización"""
     cot = Cotizacion.query.get_or_404(id)
     return jsonify(cot.to_dict())
 
@@ -173,12 +183,11 @@ def get_client_orders(client_id):
         return jsonify({"success": False, "message": str(e)}), 500
 
 # ==========================================
-# 📋 GESTIÓN DE ÓRDENES (Nueva funcionalidad)
+# 📋 GESTIÓN DE ÓRDENES
 # ==========================================
 
 @app.route('/ordenes', methods=['GET'])
 def get_ordenes():
-    """Listar todas las órdenes ordenadas por fecha de entrega"""
     try:
         ordenes = Orden.query.order_by(Orden.fecha_entrega.asc(), Orden.fecha_creacion.desc()).all()
         return jsonify([o.to_summary_dict() for o in ordenes])
@@ -188,25 +197,21 @@ def get_ordenes():
 
 @app.route('/clients/<int:client_id>/ordenes', methods=['GET'])
 def get_client_ordenes(client_id):
-    """Listar órdenes de un cliente específico"""
     ordenes = Orden.query.join(Cotizacion).filter(Cotizacion.cliente_id == client_id).order_by(Orden.fecha_creacion.desc()).all()
     return jsonify([o.to_summary_dict() for o in ordenes])
 
 @app.route('/ordenes', methods=['POST'])
 def create_orden():
-    """Crear una orden desde una cotización confirmada"""
     data = request.get_json()
     try:
         cotizacion_id = data.get('cotizacion_id')
         if not cotizacion_id:
             return jsonify({"success": False, "message": "Falta cotizacion_id"}), 400
         
-        # Verificar que la cotización existe
         cotizacion = Cotizacion.query.get(cotizacion_id)
         if not cotizacion:
             return jsonify({"success": False, "message": "Cotización no encontrada"}), 404
         
-        # Verificar si ya existe una orden para esta cotización
         existing_orden = Orden.query.filter_by(cotizacion_id=cotizacion_id).first()
         if existing_orden:
             return jsonify({"success": False, "message": "Ya existe una orden para esta cotización"}), 400
@@ -218,7 +223,7 @@ def create_orden():
         
         new_orden = Orden(
             cotizacion_id=cotizacion_id,
-            cliente_id=cotizacion.cliente_id, # Copy client ID from cotizacion
+            cliente_id=cotizacion.cliente_id, 
             estado=data.get('estado', 'en_proceso'),
             fecha_entrega=fecha_entrega,
             detail=data.get('detail', '')
@@ -233,13 +238,11 @@ def create_orden():
 
 @app.route('/ordenes/<int:id>', methods=['GET'])
 def get_orden_detail(id):
-    """Obtener detalle completo de una orden"""
     orden = Orden.query.get_or_404(id)
     return jsonify(orden.to_dict())
 
 @app.route('/ordenes/<int:id>', methods=['PUT'])
 def update_orden(id):
-    """Actualizar estado u otros campos de una orden"""
     orden = Orden.query.get_or_404(id)
     data = request.get_json()
     
@@ -267,7 +270,6 @@ def update_orden(id):
 
 @app.route('/ordenes/<int:id>', methods=['DELETE'])
 def delete_orden(id):
-    """Eliminar una orden"""
     orden = Orden.query.get_or_404(id)
     try:
         db.session.delete(orden)
@@ -278,19 +280,8 @@ def delete_orden(id):
         return jsonify({"success": False, "message": str(e)}), 500
 
 # ==========================================
-# 🖼️ PROCESAMIENTO
+# 🖼️ PROCESAMIENTO (CORREGIDO PARA URL OPTIMIZADA)
 # ==========================================
-
-import cloudinary
-import cloudinary.uploader
-
-# Cloudinary Config
-cloudinary.config( 
-    cloud_name = "duaygs2wg", 
-    api_key = "164218529945144", 
-    api_secret = "egETNReBOVubf_K52qBIpJYMoPg", 
-    secure=True
-)
 
 @app.route('/process', methods=['POST'])
 def process_image():
@@ -298,24 +289,27 @@ def process_image():
         return jsonify({"success": False, "message": "Falta la imagen"}), 400
     
     file = request.files['image']
+    
     try:
         width_req_cm = float(request.form.get('width', 10))
     except:
         return jsonify({"success": False, "message": "Ancho inválido"}), 400
     
     try:
+        # 1. Eliminar Fondo
         input_image = Image.open(file.stream)
         output_image = remove(input_image) 
 
+        # 2. Calcular Precios y Puntadas
         p = ConfiguracionPrecios.query.filter_by(activo=True).first()
         if not p:
+            # Fallback si no hay config
             p = type('obj', (object,), {
                 'precio_stitch_1000': 1.0, 'factor_cambio_hilo': 0.5, 'costo_pellon': 300.0,
                 'tela_estructurante': 180.0, 'tela_normal': 18.0, 'costo_impresion': 3.0
             })
 
         CONSTANTE_DENSIDAD = 135 
-
         calculos = calcular_estimacion_puntadas(output_image, width_req_cm, CONSTANTE_DENSIDAD)
         estimated_stitches = calculos['estimatedStitches']
         real_area = calculos['realArea']
@@ -335,13 +329,34 @@ def process_image():
         precio_calculado = costo_puntadas + costo_cambios_color + costo_pellon_final
         precio_final = max(precio_calculado, 10) 
 
-        # Upload to Cloudinary
+        # 3. SUBIR A CLOUDINARY (Optimizado para ahorrar espacio)
         buffered = io.BytesIO()
-        output_image.save(buffered, format="PNG")
+        output_image.save(buffered, format="PNG") # Tu backend sigue enviando PNG
         buffered.seek(0)
         
-        upload_result = cloudinary.uploader.upload(buffered, folder="zequitex_orders", resource_type="image")
-        image_url = upload_result.get("secure_url")
+        # AQUÍ ESTÁ EL TRUCO:
+        upload_result = cloudinary.uploader.upload(
+            buffered, 
+            folder="zequitex_orders", 
+            resource_type="image",
+            # forzamos que se guarde como webp en sus servidores
+            format="webp",       
+            # forzamos que se guarde comprimido
+            quality="auto",      
+            # OPCIONAL: Si alguien sube una foto de 4000px, la reducimos a 1000px para ahorrar más espacio
+            width=1000,          
+            crop="limit"         
+        )
+        
+        public_id = upload_result.get("public_id")
+
+        # 4. GENERAR URL OPTIMIZADA (WebP + Calidad Auto)
+        # Usamos CloudinaryImage para construir una URL absoluta y segura
+        image_url = CloudinaryImage(public_id).build_url(
+            secure=True,
+            fetch_format="auto",  # Convierte a WebP automáticamente
+            quality="auto"        # Optimiza el peso
+        )
 
         return jsonify({
             "success": True,
@@ -359,7 +374,8 @@ def process_image():
                 "hilos": 0, "base": 0, "tela": 0, "corte": 0
             },
             "precio_sugerido": round(precio_final, 2),
-            "imagen_procesada": image_url, # Now returns URL
+            "imagen_procesada": image_url, # URL lista para usar
+            "public_id": public_id,        # ID para borrar después
             "mensaje": "Procesamiento automático"
         })
 
@@ -368,22 +384,20 @@ def process_image():
         return jsonify({"success": False, "message": str(e)}), 500
 
 # ==========================================
-# 👥 CRUD USUARIOS Y CLIENTES (LOGICAL DELETE)
+# 👥 CRUD USUARIOS Y CLIENTES
 # ==========================================
 
 @app.route('/users', methods=['GET'])
 def get_users():
-    # FILTRO: Solo Personal activo
     users = Personal.query.filter_by(activo=True).all()
-    # CORRECCIÓN: Agregados 'celular' y 'domicilio' al response
     res = [{
         "id": u.id, 
         "nombre": u.nombre, 
         "usuario": u.usuario, 
         "role": u.rol, 
         "activo": u.activo,
-        "celular": u.celular,      # <--- Faltaba esto
-        "domicilio": u.domicilio   # <--- Faltaba esto
+        "celular": u.celular,
+        "domicilio": u.domicilio
     } for u in users]
     return jsonify(res)
 
@@ -398,28 +412,25 @@ def create_user():
         usuario=data.get('usuario'), 
         rol=data.get('role', 'empleado'),
         password_hash=generate_password_hash(data.get('password', '123456')), 
-        celular=data.get('celular'),     # <--- Guardar celular
-        domicilio=data.get('domicilio'), # <--- Guardar domicilio
+        celular=data.get('celular'),
+        domicilio=data.get('domicilio'),
         activo=True
     )
     db.session.add(new_user)
     db.session.commit()
     return jsonify({"success": True})
 
-# --- RUTA QUE FALTABA: EDITAR USUARIO (PUT) ---
 @app.route('/users/<int:id>', methods=['PUT'])
 def update_user(id):
     user = Personal.query.get_or_404(id)
     data = request.get_json()
     
-    # Actualizamos campos si vienen en el JSON
     if 'nombre' in data: user.nombre = data['nombre']
     if 'usuario' in data: user.usuario = data['usuario']
     if 'role' in data: user.rol = data['role']
     if 'celular' in data: user.celular = data['celular']
     if 'domicilio' in data: user.domicilio = data['domicilio']
     
-    # Si viene password y no está vacío, lo actualizamos
     if data.get('password') and data.get('password').strip() != '':
         user.password_hash = generate_password_hash(data['password'])
         
@@ -436,7 +447,6 @@ def delete_user(id):
     if u.usuario == 'admin': 
         return jsonify({"success": False, "message": "No se puede eliminar la cuenta principal de administrador"}), 400
     
-    # BORRADO LÓGICO
     u.activo = False
     db.session.commit()
     return jsonify({"success": True})
@@ -462,7 +472,6 @@ def create_client():
     db.session.commit()
     return jsonify({"success": True})
 
-# --- RUTA QUE FALTABA: EDITAR CLIENTE (PUT) ---
 @app.route('/clients/<int:id>', methods=['PUT'])
 def update_client(id):
     client = Clientes.query.get_or_404(id)

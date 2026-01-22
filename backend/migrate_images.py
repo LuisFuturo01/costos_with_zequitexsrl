@@ -6,11 +6,14 @@ from app import app, db, Cotizacion
 
 # Configuración de Cloudinary (Debe coincidir con app.py si no usas env vars)
 # Nota: Idealmente esto debería venir de os.environ
+from dotenv import load_dotenv
+load_dotenv()
+
 import cloudinary
 cloudinary.config(
-  cloud_name = "duaygs2wg",
-  api_key = "164218529945144",
-  api_secret = "egETNReBOVubf_K52qBIpJYMoPg"
+  cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
+  api_key = os.getenv("CLOUDINARY_API_KEY"),
+  api_secret = os.getenv("CLOUDINARY_API_SECRET")
 )
 
 def migrate_images():

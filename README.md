@@ -15,7 +15,14 @@ Sistema de cotización de bordados para **Zequitex SRL**. Permite calcular costo
 - [Instalación y Configuración](#-instalación-y-configuración)
 - [Uso del Sistema](#-uso-del-sistema)
 
----
+
+
+> **Documentación Específica:**
+>
+> - 📘 **[Frontend README](./frontend/README.md)** (Setup, Componentes, Vite)
+> - 🐍 **[Backend README](./backend/README.md)** (API, Flask, Cloudinary)
+>
+> ---
 
 ## 📖 Descripción General
 
@@ -37,7 +44,7 @@ cotizadorZequitex/
 │   ├── app.py                  # Servidor principal y rutas API
 │   ├── database.py             # Modelos ORM con SQLAlchemy
 │   ├── image_services.py       # Procesamiento de imágenes
-│   ├── requirements.txt        # Dependencias Python
+│   ├── requirements.txt        # Dependencias Python (incluyendo cloudinary)
 │   └── zequitexcotizador.sql   # Schema de base de datos
 │
 ├── frontend/                   # Aplicación React + TypeScript
@@ -70,6 +77,7 @@ cotizadorZequitex/
 | scikit-learn | latest | Detección de colores (KMeans) |
 | Pillow | latest | Manipulación de imágenes |
 | NumPy | latest | Cálculos numéricos |
+| Cloudinary | latest | Almacenamiento optimizado de imágenes |
 
 ### Frontend
 | Tecnología | Versión | Descripción |
@@ -257,6 +265,14 @@ puntadas = área_real_cm² × densidad  # densidad = 135 por defecto
 #### Paleta de Colores de Bordado
 Negro, Blanco, Rojo, Amarillo, Verde, Azul, Naranja, Morado, Rosa, Café, Celeste, Dorado, Gris, Azul Marino, Fucsia, Verde Lima, Turquesa, Vino, Beige, Coral
 
+### Integración con Cloudinary ☁️
+
+Para optimizar el almacenamiento y rendimiento, las imágenes procesadas ya no se guardan como Base64 en la base de datos.
+
+1.  **Subida**: El backend sube la imagen procesada a Cloudinary.
+2.  **Optimización**: Se convierte automáticamente a formato **WebP** y calidad automática.
+3.  **Almacenamiento**: Se guarda la URL segura (`https://res.cloudinary.com/...`) en el campo `datos_json` de la tabla `cotizacion`.
+
 ---
 
 ## 💻 Frontend
@@ -361,6 +377,11 @@ DATABASE_URI=mysql+pymysql://usuario:password@localhost/zequitexcotizador
 FLASK_DEBUG=True
 FLASK_HOST=0.0.0.0
 FLASK_PORT=5000
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=tu_cloud_name
+CLOUDINARY_API_KEY=tu_api_key
+CLOUDINARY_API_SECRET=tu_api_secret
 ```
 
 El backend estará disponible en `http://localhost:5000`

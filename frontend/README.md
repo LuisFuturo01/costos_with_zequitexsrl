@@ -1,73 +1,79 @@
-# React + TypeScript + Vite
+# 🎨 Zequitex Cotizador - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicación web desarrollada con **React + TypeScript + Vite** para el sistema de cotización de Zequitex SRL.
 
-Currently, two official plugins are available:
+## 🚀 Características
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Diseño Moderno**: Interfaz de usuario intuitiva y responsiva.
+- **Cotización Multimodal**:
+  - 📤 **Upload**: Subida de archivos de imagen.
+  - 📷 **Cámara**: Captura en tiempo real.
+  - ✍️ **Manual**: Entrada de datos directa.
+- **Visualización en Tiempo Real**: Vista previa de la imagen procesada y desglose de costos.
+- **Gestión de Órdenes**: Flujo completo desde cotización hasta orden de trabajo.
+- **Optimización de Imágenes**: Integración con Cloudinary para almacenamiento eficiente (WebP).
 
-## React Compiler
+## 🛠 Instalación y Ejecución
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Requisitos
+- Node.js 18.x o superior
+- npm 9.x o superior
 
-## Expanding the ESLint configuration
+### Pasos
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+1.  **Clonar el repositorio** (si aún no lo has hecho):
+    ```bash
+    git clone <url-del-repo>
+    cd cotizadorZequitex/frontend
+    ```
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+2.  **Instalar dependencias**:
+    ```bash
+    npm install
+    ```
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+3.  **Configurar variables de entorno**:
+    Crea un archivo `.env` en la raíz del directorio `frontend` basado en `.env.example`:
+    ```env
+    VITE_API_URL=http://localhost:5000
+    ```
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+4.  **Ejecutar servidor de desarrollo**:
+    ```bash
+    npm run dev
+    ```
+    La aplicación estará disponible en `http://localhost:5173`.
+
+## 📦 Estructura del Proyecto
+
+```
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── modes/          # Modos de cotización (Camera, Upload, Manual)
+│   │   ├── ui/             # Componentes UI reutilizables
+│   │   └── views/          # Vistas principales (Config, Login, Ordenes)
+│   ├── services/           # Lógica de comunicación con API
+│   ├── types/              # Definiciones de tipos TypeScript
+│   └── App.tsx             # Componente raíz y ruteo
+└── vite.config.ts          # Configuración de Vite
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 🌐 Despliegue con zrok
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Para exponer la aplicación públicamente usando zrok:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1.  Asegúrate de tener en `vite.config.ts`:
+    ```ts
+    server: {
+      host: '0.0.0.0',
+      allowedHosts: 'all'
+    }
+    ```
+2.  Ejecuta el tunel:
+    ```bash
+    zrok reserve public http://127.0.0.1:5173 --backend-mode proxy
+    ```
+
+---
+© 2024 Zequitex SRL
