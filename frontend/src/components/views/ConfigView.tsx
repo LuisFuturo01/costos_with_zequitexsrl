@@ -126,7 +126,8 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
     try {
       await api.createOrden({
         cotizacion_id: orderFromCotizacion.id,
-        fecha_entrega: newOrderFechaEntrega || undefined
+        fecha_entrega: newOrderFechaEntrega || undefined,
+        personal_id: currentUser ? currentUser.id : null
       });
       setAlertInfo({ open: true, msg: '✅ Orden creada correctamente' });
       setOrderFromCotizacion(null);
@@ -146,7 +147,8 @@ export const ConfigView = ({ config, setConfig, setView, setIsLoggedIn, currentU
           const payload = {
               ...newOrderData,
               cliente_id: selectedClientForOrders?.id,
-              configuracion_id: config.pricing.id 
+              configuracion_id: config.pricing.id,
+              personal_id: currentUser ? currentUser.id : null
           }; 
           await api.saveOrder(payload);
           setAlertInfo({ open: true, msg: '✅ Nueva cotización generada correctamente' });

@@ -27,15 +27,17 @@ API RESTful desarrollada con **Flask** para gestionar la lógica de negocio, pro
 3.  **Configurar variables de entorno**:
     Crea un archivo `.env` basado en `.env.example`:
     ```env
-    DATABASE_URI=mysql+pymysql://root:@localhost/zequitexcotizador
+    DATABASE_MYSQL=mysql+pymysql://root:@localhost/zequicotizador
+    DATABASE_POSTGRESQL=postgresql://postgres:password@localhost:5432/zequicotizador_postgre
     CLOUDINARY_CLOUD_NAME=...
     CLOUDINARY_API_KEY=...
     CLOUDINARY_API_SECRET=...
     ```
 
-4.  **Iniciar base de datos**:
-    Importa el archivo `zequitexcotizador.sql` en tu gestor de base de datos.
-    El sistema creará un usuario admin por defecto si no existe al arrancar (`admin` / `12345678`).
+4.  **Iniciar bases de datos**:
+    - Importa el archivo `heterogenea-mysql.sql` en tu gestor **MySQL / MariaDB**.
+    - Importa el archivo `heterogenea-postgresql.sql` en tu gestor **PostgreSQL**.
+    - El sistema creará un usuario admin por defecto en MySQL si no existe al arrancar (`admin` / `12345678`).
 
 5.  **Ejecutar servidor**:
     ```bash

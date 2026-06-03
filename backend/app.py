@@ -18,7 +18,8 @@ from cloudinary import CloudinaryImage
 # Cargar variables de entorno desde .env
 load_dotenv()
 
-from database import db, Personal, Clientes, ConfiguracionPrecios, Cotizacion, Orden, init_db_data
+from database import db, init_db_data
+import db_services
 
 try:
     from image_services import obtener_colores_dominantes_avanzado, calcular_estimacion_puntadas
@@ -29,8 +30,11 @@ app = Flask(__name__)
 # Configuración CORS
 CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers=["Content-Type", "skip_zrok_interstitial"])
 
-# Cargar configuración de DB
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'mysql+pymysql://root:@localhost/zequitexcotizador')
+# Cargar configuración de DB (Heterogénea: MySQL por defecto, PostgreSQL para cotizaciones/órdenes)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_MYSQL', 'mysql+pymysql://LuisFuturo01:LuisFuturo01_2025@localhost/zequicotizador')
+app.config['SQLALCHEMY_BINDS'] = {
+    'postgresql': os.getenv('DATABASE_POSTGRESQL', 'postgresql://postgres:LuisFuturo01_2025@localhost:5433/zequicotizador_postgre')
+}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
@@ -56,7 +60,7 @@ def login():
     username = data.get('username')
     password = data.get('password')
     
-    user = Personal.query.filter_by(usuario=username, activo=True).first()
+    user = db_services.get_user_by_username(username)
     
     if user and check_password_hash(user.password_hash, password):
         return jsonify({"success": True, "user": {"id": user.id, "nombre": user.nombre, "usuario": user.usuario, "role": user.rol}})
@@ -68,15 +72,14 @@ def change_password():
     current = data.get('current_password')
     new_pass = data.get('new_password')
     
-    users = Personal.query.filter_by(activo=True).all()
+    users = db_services.get_all_active_users()
     target_user = None
     for u in users:
         if check_password_hash(u.password_hash, current):
             target_user = u
             break
     if target_user:
-        target_user.password_hash = generate_password_hash(new_pass)
-        db.session.commit()
+        db_services.update_user_password(target_user.id, generate_password_hash(new_pass))
         return jsonify({"success": True})
     return jsonify({"success": False, "message": "Contraseña actual incorrecta"}), 400
 
@@ -86,7 +89,7 @@ def change_password():
 
 @app.route('/config', methods=['GET'])
 def get_config():
-    precios_db = ConfiguracionPrecios.query.filter_by(activo=True).order_by(ConfiguracionPrecios.id.desc()).first()
+    precios_db = db_services.get_active_pricing()
     response = {}
     if precios_db:
         response['pricing'] = precios_db.to_dict()
@@ -103,33 +106,14 @@ def get_config():
 
 @app.route('/config/history', methods=['GET'])
 def get_price_history():
-    history = ConfiguracionPrecios.query.order_by(ConfiguracionPrecios.fecha_modificacion.desc()).limit(50).all()
+    history = db_services.get_pricing_history()
     return jsonify([h.to_dict() for h in history])
 
 @app.route('/config', methods=['POST'])
 def update_config():
     data = request.get_json()
     p = data.get('pricing', {})
-    
-    current_price = ConfiguracionPrecios.query.filter_by(activo=True).first()
-    if current_price: current_price.activo = False
-    
-    new_price = ConfiguracionPrecios(
-        precio_stitch_1000=p.get('precio_stitch_1000', 0),
-        factor_cambio_hilo=p.get('factor_cambio_hilo', 0),
-        costo_hilo_bordar=p.get('costo_hilo_bordar', 0),
-        costo_hilo_bobina=p.get('costo_hilo_bobina', 0),
-        costo_pellon=p.get('costo_pellon', 0),
-        tela_estructurante=p.get('tela_estructurante', 0),
-        tela_normal=p.get('tela_normal', 0),
-        rollo_papel=p.get('rollo_papel', 0),
-        costo_impresion=p.get('costo_impresion', 0),
-        corte_impresion=p.get('corte_impresion', 0),
-        activo=True,
-        fecha_modificacion=datetime.utcnow()
-    )
-    db.session.add(new_price)
-    db.session.commit()
+    db_services.update_pricing_config(p)
     return jsonify({"success": True})
 
 # ==========================================
@@ -143,40 +127,41 @@ def create_order():
         if not data.get('cliente_id') or not data.get('configuracion_id'):
             return jsonify({"success": False, "message": "Faltan IDs de cliente o configuración"}), 400
 
-        new_cotizacion = Cotizacion(
-            cliente_id=data.get('cliente_id'),
-            configuracion_id=data.get('configuracion_id'),
-            nombre_trabajo=data.get('nombre_trabajo', 'Cotización'),
-            puntadas=data.get('puntadas', 0),
-            colores=data.get('colores', 1),
-            ancho=data.get('ancho', 0.0),
-            alto=data.get('alto', 0.0),
-            bastidor=data.get('bastidor', ''),
-            tipo_tela=data.get('tipo_tela', ''),
-            tiene_sublimacion=data.get('tiene_sublimacion', False),
-            cantidad=data.get('cantidad', 1),
-            precio_unitario=data.get('precio_unitario', 0.0),
-            precio_total=data.get('precio_total', 0.0),
-            datos_json=data.get('datos_json'),
-            detalles=f"{data.get('nombre_trabajo')} - Total: {data.get('precio_total')}"
-        )
-        db.session.add(new_cotizacion)
-        db.session.commit()
+        order_payload = {
+            "cliente_id": data.get('cliente_id'),
+            "configuracion_id": data.get('configuracion_id'),
+            "nombre_trabajo": data.get('nombre_trabajo', 'Cotización'),
+            "puntadas": data.get('puntadas', 0),
+            "colores": data.get('colores', 1),
+            "ancho": data.get('ancho', 0.0),
+            "alto": data.get('alto', 0.0),
+            "bastidor": data.get('bastidor', ''),
+            "tipo_tela": data.get('tipo_tela', ''),
+            "tiene_sublimacion": data.get('tiene_sublimacion', False),
+            "cantidad": data.get('cantidad', 1),
+            "precio_unitario": data.get('precio_unitario', 0.0),
+            "precio_total": data.get('precio_total', 0.0),
+            "datos_json": data.get('datos_json'),
+            "detalles": f"{data.get('nombre_trabajo')} - Total: {data.get('precio_total')}",
+            "personal_id": data.get('personal_id')
+        }
+        new_cotizacion = db_services.create_cotizacion(order_payload)
         return jsonify({"success": True, "id": new_cotizacion.id})
     except Exception as e:
         print("Error saving cotizacion:", e)
-        db.session.rollback()
         return jsonify({"success": False, "message": f"Error SQL: {str(e)}"}), 500
 
 @app.route('/orders/<int:id>', methods=['GET'])
 def get_order_detail(id):
-    cot = Cotizacion.query.get_or_404(id)
+    cot = db_services.get_cotizacion_by_id(id)
+    if not cot:
+        return jsonify({"success": False, "message": "Cotización no encontrada"}), 404
     return jsonify(cot.to_dict())
 
 @app.route('/clients/<int:client_id>/orders', methods=['GET'])
 def get_client_orders(client_id):
     try:
-        cotizaciones = Cotizacion.query.filter_by(cliente_id=client_id).order_by(Cotizacion.fecha_pedido.desc()).all()
+        cotizaciones = db_services.get_cotizaciones_by_client(client_id)
         return jsonify([c.to_summary_dict() for c in cotizaciones])
     except Exception as e:
         print(f"Error in get_client_orders: {e}")
@@ -189,7 +174,7 @@ def get_client_orders(client_id):
 @app.route('/ordenes', methods=['GET'])
 def get_ordenes():
     try:
-        ordenes = Orden.query.order_by(Orden.fecha_entrega.asc(), Orden.fecha_creacion.desc()).all()
+        ordenes = db_services.get_all_ordenes()
         return jsonify([o.to_summary_dict() for o in ordenes])
     except Exception as e:
         print(f"Error in get_ordenes: {e}")
@@ -197,7 +182,7 @@ def get_ordenes():
 
 @app.route('/clients/<int:client_id>/ordenes', methods=['GET'])
 def get_client_ordenes(client_id):
-    ordenes = Orden.query.join(Cotizacion).filter(Cotizacion.cliente_id == client_id).order_by(Orden.fecha_creacion.desc()).all()
+    ordenes = db_services.get_ordenes_by_client(client_id)
     return jsonify([o.to_summary_dict() for o in ordenes])
 
 @app.route('/ordenes', methods=['POST'])
@@ -208,11 +193,11 @@ def create_orden():
         if not cotizacion_id:
             return jsonify({"success": False, "message": "Falta cotizacion_id"}), 400
         
-        cotizacion = Cotizacion.query.get(cotizacion_id)
+        cotizacion = db_services.get_cotizacion_by_id(cotizacion_id)
         if not cotizacion:
             return jsonify({"success": False, "message": "Cotización no encontrada"}), 404
         
-        existing_orden = Orden.query.filter_by(cotizacion_id=cotizacion_id).first()
+        existing_orden = db_services.get_orden_by_cotizacion_id(cotizacion_id)
         if existing_orden:
             return jsonify({"success": False, "message": "Ya existe una orden para esta cotización"}), 400
         
@@ -221,62 +206,66 @@ def create_orden():
             from datetime import datetime as dt
             fecha_entrega = dt.strptime(data.get('fecha_entrega'), '%Y-%m-%d').date()
         
-        new_orden = Orden(
+        new_orden = db_services.create_orden(
             cotizacion_id=cotizacion_id,
-            cliente_id=cotizacion.cliente_id, 
             estado=data.get('estado', 'en_proceso'),
             fecha_entrega=fecha_entrega,
-            detail=data.get('detail', '')
+            detail=data.get('detail', ''),
+            personal_id=data.get('personal_id')
         )
-        db.session.add(new_orden)
-        db.session.commit()
         return jsonify({"success": True, "id": new_orden.id})
     except Exception as e:
         print("Error creating orden:", e)
-        db.session.rollback()
         return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
 
 @app.route('/ordenes/<int:id>', methods=['GET'])
 def get_orden_detail(id):
-    orden = Orden.query.get_or_404(id)
+    orden = db_services.get_orden_by_id(id)
+    if not orden:
+        return jsonify({"success": False, "message": "Orden no encontrada"}), 404
     return jsonify(orden.to_dict())
 
 @app.route('/ordenes/<int:id>', methods=['PUT'])
 def update_orden(id):
-    orden = Orden.query.get_or_404(id)
+    orden = db_services.get_orden_by_id(id)
+    if not orden:
+        return jsonify({"success": False, "message": "Orden no encontrada"}), 404
+        
     data = request.get_json()
+    update_data = {}
     
     if 'estado' in data:
         if data['estado'] not in ['en_proceso', 'cancelado', 'entregado']:
             return jsonify({"success": False, "message": "Estado inválido"}), 400
-        orden.estado = data['estado']
+        update_data['estado'] = data['estado']
     
     if 'detail' in data:
-        orden.detail = data['detail']
+        update_data['detail'] = data['detail']
     
     if 'fecha_entrega' in data:
         if data['fecha_entrega']:
             from datetime import datetime as dt
-            orden.fecha_entrega = dt.strptime(data['fecha_entrega'], '%Y-%m-%d').date()
+            update_data['fecha_entrega'] = dt.strptime(data['fecha_entrega'], '%Y-%m-%d').date()
         else:
-            orden.fecha_entrega = None
+            update_data['fecha_entrega'] = None
+            
+    if 'personal_id' in data:
+        update_data['personal_id'] = data['personal_id']
     
     try:
-        db.session.commit()
-        return jsonify({"success": True, "orden": orden.to_dict()})
+        updated = db_services.update_orden(id, update_data)
+        return jsonify({"success": True, "orden": updated.to_dict()})
     except Exception as e:
-        db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/ordenes/<int:id>', methods=['DELETE'])
 def delete_orden(id):
-    orden = Orden.query.get_or_404(id)
     try:
-        db.session.delete(orden)
-        db.session.commit()
+        success = db_services.delete_orden(id)
+        if not success:
+            return jsonify({"success": False, "message": "Orden no encontrada"}), 404
         return jsonify({"success": True})
     except Exception as e:
-        db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
 
 # ==========================================
@@ -301,7 +290,7 @@ def process_image():
         output_image = remove(input_image) 
 
         # 2. Calcular Precios y Puntadas
-        p = ConfiguracionPrecios.query.filter_by(activo=True).first()
+        p = db_services.get_active_pricing()
         if not p:
             # Fallback si no hay config
             p = type('obj', (object,), {
@@ -389,7 +378,7 @@ def process_image():
 
 @app.route('/users', methods=['GET'])
 def get_users():
-    users = Personal.query.filter_by(activo=True).all()
+    users = db_services.get_all_active_users()
     res = [{
         "id": u.id, 
         "nombre": u.nombre, 
@@ -404,111 +393,84 @@ def get_users():
 @app.route('/users', methods=['POST'])
 def create_user():
     data = request.get_json()
-    if Personal.query.filter_by(usuario=data.get('usuario')).first():
+    if db_services.get_user_by_username(data.get('usuario'), active_only=False):
         return jsonify({"success": False, "message": "Usuario existe"}), 400
     
-    new_user = Personal(
+    db_services.create_user(
         nombre=data.get('nombre'), 
         usuario=data.get('usuario'), 
         rol=data.get('role', 'empleado'),
         password_hash=generate_password_hash(data.get('password', '123456')), 
         celular=data.get('celular'),
-        domicilio=data.get('domicilio'),
-        activo=True
+        domicilio=data.get('domicilio')
     )
-    db.session.add(new_user)
-    db.session.commit()
     return jsonify({"success": True})
 
 @app.route('/users/<int:id>', methods=['PUT'])
 def update_user(id):
-    user = Personal.query.get_or_404(id)
     data = request.get_json()
-    
-    if 'nombre' in data: user.nombre = data['nombre']
-    if 'usuario' in data: user.usuario = data['usuario']
-    if 'role' in data: user.rol = data['role']
-    if 'celular' in data: user.celular = data['celular']
-    if 'domicilio' in data: user.domicilio = data['domicilio']
-    
-    if data.get('password') and data.get('password').strip() != '':
-        user.password_hash = generate_password_hash(data['password'])
-        
-    try:
-        db.session.commit()
-        return jsonify({"success": True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"success": False, "message": str(e)}), 500
+    user = db_services.update_user(id, data)
+    if not user:
+        return jsonify({"success": False, "message": "Usuario no encontrado"}), 404
+    return jsonify({"success": True})
 
 @app.route('/users/<int:id>', methods=['DELETE'])
 def delete_user(id):
-    u = Personal.query.get_or_404(id)
+    u = db_services.get_user_by_id(id)
+    if not u:
+         return jsonify({"success": False, "message": "Usuario no encontrado"}), 404
     if u.usuario == 'admin': 
         return jsonify({"success": False, "message": "No se puede eliminar la cuenta principal de administrador"}), 400
     
-    u.activo = False
-    db.session.commit()
+    db_services.delete_user(id)
     return jsonify({"success": True})
 
 # --- CLIENTES ---
 
 @app.route('/clients', methods=['GET'])
 def get_clients():
-    clients = Clientes.query.filter_by(estado=True).all()
+    clients = db_services.get_all_active_clients()
     res = [{"id":c.id, "nombre":c.nombre, "numero_referencia":c.numero_referencia, "domicilio":c.domicilio} for c in clients]
     return jsonify(res)
 
 @app.route('/clients', methods=['POST'])
 def create_client():
     data = request.get_json()
-    new_c = Clientes(
+    db_services.create_client(
         nombre=data.get('nombre'), 
         numero_referencia=data.get('numero_referencia'), 
-        domicilio=data.get('domicilio'),
-        estado=True
+        domicilio=data.get('domicilio')
     )
-    db.session.add(new_c)
-    db.session.commit()
     return jsonify({"success": True})
 
 @app.route('/clients/<int:id>', methods=['PUT'])
 def update_client(id):
-    client = Clientes.query.get_or_404(id)
     data = request.get_json()
-    
-    if 'nombre' in data: client.nombre = data['nombre']
-    if 'numero_referencia' in data: client.numero_referencia = data['numero_referencia']
-    if 'domicilio' in data: client.domicilio = data['domicilio']
-    
-    try:
-        db.session.commit()
-        return jsonify({"success": True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"success": False, "message": str(e)}), 500
+    client = db_services.update_client(id, data)
+    if not client:
+        return jsonify({"success": False, "message": "Cliente no encontrado"}), 404
+    return jsonify({"success": True})
 
 @app.route('/clients/<int:id>', methods=['DELETE'])
 def delete_client(id):
-    c = Clientes.query.get_or_404(id)
-    c.estado = False 
-    db.session.commit()
+    success = db_services.delete_client(id)
+    if not success:
+         return jsonify({"success": False, "message": "Cliente no encontrado"}), 404
     return jsonify({"success": True})
 
 if __name__ == '__main__':
     init_db_data(app)
     with app.app_context():
-        if not Personal.query.filter_by(usuario='admin').first():
+        if not db_services.get_user_by_username('admin', active_only=False):
             print("👤 Creando admin por defecto...")
-            admin = Personal(
+            db_services.create_user(
                 nombre='Administrador Principal', 
                 usuario='admin', 
                 rol='administrador', 
                 password_hash=generate_password_hash('12345678'),
-                activo=True
+                celular=None,
+                domicilio=None
             )
-            db.session.add(admin)
-            db.session.commit()
     app.run(
         debug=os.getenv('FLASK_DEBUG', 'True').lower() == 'true',
         host=os.getenv('FLASK_HOST', '0.0.0.0'),

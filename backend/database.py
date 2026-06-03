@@ -1,6 +1,8 @@
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash
 from datetime import datetime
+from sqlalchemy import text
+from decimal import Decimal
 
 db = SQLAlchemy()
 
@@ -69,11 +71,12 @@ class ConfiguracionPrecios(db.Model):
 
 # --- COTIZACIONES (antes Órdenes) ---
 class Cotizacion(db.Model):
+    __bind_key__ = 'postgresql'
     __tablename__ = 'cotizacion'
     
     id = db.Column(db.Integer, primary_key=True)
-    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
-    configuracion_id = db.Column(db.Integer, db.ForeignKey('configuracion_precios.id'), nullable=False)
+    cliente_id = db.Column(db.Integer, nullable=False)
+    configuracion_id = db.Column(db.Integer, nullable=False)
     
     nombre_trabajo = db.Column(db.String(150), nullable=False, default="Cotización")
     fecha_pedido = db.Column(db.DateTime, default=datetime.utcnow)
@@ -84,7 +87,7 @@ class Cotizacion(db.Model):
     alto = db.Column(db.Numeric(10, 2), default=0.00)
     bastidor = db.Column(db.String(100))
     tipo_tela = db.Column(db.String(50))
-    tiene_sublimacion = db.Column(db.Boolean, default=False)
+    tiene_sublimacion = db.Column(db.SmallInteger, default=0)
 
     cantidad = db.Column(db.Integer, default=1)
     precio_unitario = db.Column(db.Numeric(10, 2), default=0.00)
@@ -92,8 +95,21 @@ class Cotizacion(db.Model):
     
     datos_json = db.Column(db.Text) 
     detalles = db.Column(db.Text)
+    personal_id = db.Column(db.Integer, nullable=True)
 
-    cliente = db.relationship('Clientes', backref=db.backref('cotizaciones', lazy=True))
+    @property
+    def cliente(self):
+        return Clientes.query.get(self.cliente_id)
+
+    @property
+    def configuracion(self):
+        return ConfiguracionPrecios.query.get(self.configuracion_id)
+
+    @property
+    def personal(self):
+        if self.personal_id:
+            return Personal.query.get(self.personal_id)
+        return None
 
     def to_dict(self):
         return {
@@ -108,12 +124,14 @@ class Cotizacion(db.Model):
             "alto": float(self.alto) if self.alto else 0,
             "bastidor": self.bastidor,
             "tipo_tela": self.tipo_tela,
-            "tiene_sublimacion": self.tiene_sublimacion,
+            "tiene_sublimacion": bool(self.tiene_sublimacion),
             "cantidad": self.cantidad,
             "precio_unitario": float(self.precio_unitario) if self.precio_unitario else 0,
             "precio_total": float(self.precio_total) if self.precio_total else 0,
             "datos_json": self.datos_json,
-            "detalles": self.detalles 
+            "detalles": self.detalles,
+            "personal_id": self.personal_id,
+            "personal_nombre": self.personal.nombre if self.personal else None
         }
 
     def to_summary_dict(self):
@@ -129,29 +147,34 @@ class Cotizacion(db.Model):
             "alto": float(self.alto) if self.alto else 0,
             "bastidor": self.bastidor,
             "tipo_tela": self.tipo_tela,
-            "tiene_sublimacion": self.tiene_sublimacion,
+            "tiene_sublimacion": bool(self.tiene_sublimacion),
             "cantidad": self.cantidad,
             "precio_unitario": float(self.precio_unitario) if self.precio_unitario else 0,
             "precio_total": float(self.precio_total) if self.precio_total else 0,
-            # Exclude heavy fields
-            # "datos_json": self.datos_json,
-            # "detalles": self.detalles 
+            "personal_id": self.personal_id,
+            "personal_nombre": self.personal.nombre if self.personal else None
         }
 
 # --- ÓRDENES (Nueva tabla) ---
 class Orden(db.Model):
+    __bind_key__ = 'postgresql'
     __tablename__ = 'orden'
     
     id = db.Column(db.Integer, primary_key=True)
     cotizacion_id = db.Column(db.Integer, db.ForeignKey('cotizacion.id'), nullable=False)
-    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False) # Restore missing column
     estado = db.Column(db.String(20), nullable=False, default='en_proceso')  # en_proceso, cancelado, entregado
     fecha_entrega = db.Column(db.Date, nullable=True)
     detail = db.Column(db.Text)  # Observaciones durante el proceso
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    personal_id = db.Column(db.Integer, nullable=True)
     
     cotizacion = db.relationship('Cotizacion', backref=db.backref('orden', uselist=False))
-    cliente = db.relationship('Clientes', backref=db.backref('ordenes', lazy=True))
+
+    @property
+    def personal(self):
+        if self.personal_id:
+            return Personal.query.get(self.personal_id)
+        return None
 
     def to_dict(self):
         cot = self.cotizacion
@@ -178,8 +201,10 @@ class Orden(db.Model):
             "tipo_tela": cot.tipo_tela if cot else '',
             "tiene_sublimacion": cot.tiene_sublimacion if cot else False,
             "datos_json": cot.datos_json if cot else None,
-             # Precio unitario también es útil
-            "precio_unitario": float(cot.precio_unitario) if cot and cot.precio_unitario is not None else 0.0
+            # Precio unitario también es útil
+            "precio_unitario": float(cot.precio_unitario) if cot and cot.precio_unitario is not None else 0.0,
+            "personal_id": self.personal_id,
+            "personal_nombre": self.personal.nombre if self.personal else None
         }
 
     def to_summary_dict(self):
@@ -199,19 +224,62 @@ class Orden(db.Model):
             "fecha_pedido": cot.fecha_pedido.isoformat() if cot and cot.fecha_pedido else None,
             "puntadas": cot.puntadas if cot else 0,
             "colores": cot.colores if cot else 1,
-            # Exclude heavy fields
-            # "datos_json": cot.datos_json if cot else None,
+            "personal_id": self.personal_id,
+            "personal_nombre": self.personal.nombre if self.personal else None
         }
 
 def init_db_data(app):
     with app.app_context():
+        # Crear las tablas en sus respectivos binds (MySQL y PostgreSQL)
         db.create_all()
+        
+        # Ejecutar migraciones automáticas en MySQL (default bind)
+        try:
+            with db.engine.connect() as conn:
+                # 1. Tabla 'personal'
+                result = conn.execute(text("SHOW COLUMNS FROM personal LIKE 'celular'"))
+                if not result.fetchone():
+                    print("⚙️ Migración: Agregando columna 'celular' a 'personal'...")
+                    conn.execute(text("ALTER TABLE personal ADD COLUMN celular VARCHAR(20) DEFAULT NULL"))
+                result = conn.execute(text("SHOW COLUMNS FROM personal LIKE 'domicilio'"))
+                if not result.fetchone():
+                    print("⚙️ Migración: Agregando columna 'domicilio' a 'personal'...")
+                    conn.execute(text("ALTER TABLE personal ADD COLUMN domicilio TEXT DEFAULT NULL"))
+                
+                # 2. Tabla 'configuracion_precios'
+                result = conn.execute(text("SHOW COLUMNS FROM configuracion_precios LIKE 'corte_impresion'"))
+                if not result.fetchone():
+                    print("⚙️ Migración: Agregando columna 'corte_impresion' a 'configuracion_precios'...")
+                    conn.execute(text("ALTER TABLE configuracion_precios ADD COLUMN corte_impresion DECIMAL(10,2) DEFAULT NULL"))
+                
+                conn.commit()
+        except Exception as e_mig:
+            print(f"⚠️ Error durante la migración automática del esquema MySQL: {e_mig}")
+
         if not ConfiguracionPrecios.query.first():
             print("💰 Creando precios iniciales...")
             precios = ConfiguracionPrecios(
-                precio_stitch_1000=1.0, factor_cambio_hilo=0.5, costo_hilo_bordar=19.0,
-                costo_hilo_bobina=9.0, costo_pellon=300.0, tela_estructurante=180.0,
-                tela_normal=18.0, rollo_papel=330.0, costo_impresion=3.0, corte_impresion=1.7,
+                # pyrefly: ignore [unexpected-keyword]
+                precio_stitch_1000=Decimal('1.0'),
+                # pyrefly: ignore [unexpected-keyword]
+                factor_cambio_hilo=Decimal('0.5'),
+                # pyrefly: ignore [unexpected-keyword]
+                costo_hilo_bordar=Decimal('19.0'),
+                # pyrefly: ignore [unexpected-keyword]
+                costo_hilo_bobina=Decimal('9.0'),
+                # pyrefly: ignore [unexpected-keyword]
+                costo_pellon=Decimal('300.0'),
+                # pyrefly: ignore [unexpected-keyword]
+                tela_estructurante=Decimal('180.0'),
+                # pyrefly: ignore [unexpected-keyword]
+                tela_normal=Decimal('18.0'),
+                # pyrefly: ignore [unexpected-keyword]
+                rollo_papel=Decimal('330.0'),
+                # pyrefly: ignore [unexpected-keyword]
+                costo_impresion=Decimal('3.0'),
+                # pyrefly: ignore [unexpected-keyword]
+                corte_impresion=1.7,
+                # pyrefly: ignore [unexpected-keyword]
                 activo=True
             )
             db.session.add(precios)

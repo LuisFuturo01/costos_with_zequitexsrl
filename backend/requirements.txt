@@ -8,6 +8,9 @@ werkzeug
 scikit-learn
 numpy
 pillow
-rembg[gpu]
+rembg[cpu]
+onnxruntime
 python-dotenv
 cloudinary
+psycopg2-binary
+

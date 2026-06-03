@@ -105,6 +105,8 @@ export interface Cotizacion {
   datos_json: string; 
   detalles?: string; 
   cliente_nombre?: string;
+  personal_id?: number;
+  personal_nombre?: string;
 }
 
 // Alias para compatibilidad con código existente
@@ -136,6 +138,8 @@ export interface Orden {
   tiene_sublimacion?: boolean;
   datos_json?: string;
   precio_unitario?: number;
+  personal_id?: number;
+  personal_nombre?: string;
 }
 
 export type TabMode = 'upload' | 'camera' | 'manual';

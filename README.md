@@ -96,7 +96,8 @@ cotizadorZequitex/
 ```mermaid
 erDiagram
     clientes ||--o{ cotizacion : tiene
-    clientes ||--o{ orden : tiene
+    personal ||--o{ cotizacion : crea
+    personal ||--o{ orden : procesa
     configuracion_precios ||--o{ cotizacion : usa
     cotizacion ||--o| orden : genera
 
@@ -140,6 +141,7 @@ erDiagram
         int id PK
         int cliente_id FK
         int configuracion_id FK
+        int personal_id FK
         varchar nombre_trabajo
         datetime fecha_pedido
         int puntadas
@@ -159,13 +161,11 @@ erDiagram
     orden {
         int id PK
         int cotizacion_id FK
-        int cliente_id FK
-        datetime fecha_confirmacion
+        int personal_id FK
         varchar estado
-        decimal monto_adelanto
-        text notas
         date fecha_entrega
         text detail
+        datetime fecha_creacion
     }
 ```
 
@@ -176,7 +176,7 @@ Almacena información de los clientes de la empresa.
 - **estado**: Borrado lógico (1=activo, 0=eliminado)
 
 #### `personal`
-Usuarios del sistema con autenticación.
+Usuarios del sistema con autenticación (administradores y operadores).
 - **rol**: `administrador` o `empleado`
 - **password**: Hasheado con scrypt de Werkzeug
 - **activo**: Borrado lógico
@@ -189,14 +189,17 @@ Historial de configuración de precios. Solo un registro está `activo` a la vez
 - **corte_impresion**: Relación por minuto
 
 #### `cotizacion`
-Cotizaciones generadas para clientes.
-- **datos_json**: Imagen procesada en Base64 (opcional)
+Cotizaciones generadas para clientes, vinculadas al precio de cotización y al creador.
+- **datos_json**: Imagen procesada subida a Cloudinary (URL segura)
 - **tiene_sublimacion**: Si el trabajo incluye sublimación
+- **personal_id**: Clave foránea al personal que creó la cotización
 
 #### `orden`
-Órdenes de trabajo confirmadas desde cotizaciones.
+Órdenes de trabajo confirmadas y pasadas a producción a partir de una cotización.
 - **estado**: `en_proceso`, `cancelado`, `entregado`
 - **fecha_entrega**: Fecha comprometida de entrega
+- **personal_id**: Clave foránea al personal que maneja o procesa la orden
+- **detail**: Observaciones de la orden de producción
 
 ---
 

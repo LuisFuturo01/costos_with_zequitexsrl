@@ -210,7 +210,8 @@ function App() {
           cantidad: qty,
           precio_unitario: precioUnitarioAjustado,
           precio_total: totalFinal,
-          datos_json: result.imagen_procesada ? result.imagen_procesada : null
+          datos_json: result.imagen_procesada ? result.imagen_procesada : null,
+          personal_id: currentUser ? currentUser.id : null
       };
 
       try {
@@ -239,7 +240,8 @@ function App() {
           await api.createOrden({
               cotizacion_id: lastSavedCotizacionId,
               fecha_entrega: ordenFechaEntrega || undefined,
-              detail: ordenDetail || undefined
+              detail: ordenDetail || undefined,
+              personal_id: currentUser ? currentUser.id : null
           });
           setConfirmOrderModal(false);
           setOrdenFechaEntrega('');

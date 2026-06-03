@@ -1,7 +1,7 @@
 import type { Config, ProcessResult, LoginResponse, User, Client, Pricing, Orden, Cotizacion } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
+//const API_URL = 'http://192.168.40.116:5000'
 // Cabecera indispensable para que zrok no bloquee la conexión
 const headersBase = {
   "skip_zrok_interstitial": "true"
